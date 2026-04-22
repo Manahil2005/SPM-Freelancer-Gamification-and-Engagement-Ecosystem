@@ -10,6 +10,7 @@
 -- -------------------------------------------------------
 -- UserProgress (central user gamification state)
 -- Shared by WBS 2.x and 3.x — defined here for reference
+-- WBS 2.1.1, 2.3.1, 3.1, 3.2
 -- -------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_progress (
     user_id         VARCHAR(50)   PRIMARY KEY,
@@ -72,6 +73,80 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read, created_at DESC);
 
 -- -------------------------------------------------------
+-- 2. Points Ledger (Audit Trail) - WBS 2.1.1, 2.5.4
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS points_ledger (
+    ledger_id   SERIAL PRIMARY KEY,
+    user_id     VARCHAR(50) NOT NULL REFERENCES user_progress(user_id),
+    action_type VARCHAR(50) NOT NULL,
+    points      INTEGER NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -------------------------------------------------------
+-- 3. Badges System - WBS 2.2.1, 2.2.3
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS badges (
+    badge_id    VARCHAR(20)   PRIMARY KEY,
+    name        VARCHAR(100)  NOT NULL,
+    description TEXT,
+    icon        VARCHAR(10)   -- Emoji/Icon for UI
+);
+
+
+CREATE TABLE IF NOT EXISTS user_badges (
+    user_id     VARCHAR(50)   NOT NULL REFERENCES user_progress(user_id),
+    badge_id    VARCHAR(20)   NOT NULL REFERENCES badges(badge_id),
+    unlocked_at TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, badge_id)
+);
+
+-- -------------------------------------------------------
+-- 4. Challenges & Tracking - WBS 2.4.1, 2.4.2
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS challenges (
+    challenge_id   VARCHAR(20)   PRIMARY KEY,
+    title          VARCHAR(100)  NOT NULL,
+    target_count   INTEGER       NOT NULL,
+    reward_points  INTEGER       NOT NULL,
+    expiry_days    INTEGER       NOT NULL,
+    type           VARCHAR(20)   CHECK (type IN ('Daily', 'Weekly', 'Streak'))
+);
+
+CREATE TABLE IF NOT EXISTS user_challenges (
+    id               SERIAL        PRIMARY KEY,
+    user_id          VARCHAR(50)   NOT NULL REFERENCES user_progress(user_id),
+    challenge_id     VARCHAR(20)   NOT NULL REFERENCES challenges(challenge_id),
+    current_progress INTEGER       DEFAULT 0,
+    status           VARCHAR(20)   DEFAULT 'Active' CHECK (status IN ('Active', 'Completed', 'Expired')),
+    start_date       TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- -------------------------------------------------------
+-- 8. Security Audit - WBS 5.1.1, 5.1.3
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    log_id      SERIAL        PRIMARY KEY,
+    admin_id    VARCHAR(50)   NOT NULL,
+    action      TEXT          NOT NULL,
+    target_user VARCHAR(50),
+    ip_address  VARCHAR(45),
+    timestamp   TIMESTAMPTZ   DEFAULT NOW()
+);
+
+-- -------------------------------------------------------
+-- 5. Onboarding Experience (Persistence) - WBS 4.2
+-- -------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_onboarding (
+    user_id         VARCHAR(50) PRIMARY KEY REFERENCES user_progress(user_id),
+    is_fully_completed BOOLEAN DEFAULT FALSE,
+    current_step    INTEGER DEFAULT 1,      -- Track which step they are on
+    steps_completed JSONB DEFAULT '[]',     -- Store array of completed step IDs: ["profile_pic", "bio_set"]
+    started_at      TIMESTAMPTZ DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- -------------------------------------------------------
 -- Seed dummy data for local development / testing
 -- -------------------------------------------------------
 INSERT INTO user_progress (user_id, name, total_points, level, activity_count, avg_rating, completion_rate, created_at)
@@ -91,3 +166,12 @@ VALUES
   ('n004', 'u002', 'challenge', 'New weekly challenge: Complete 3 projects this week!', FALSE),
   ('n005', 'u003', 'points',    'You earned 100 points for a 5-star client rating!', FALSE)
 ON CONFLICT (notification_id) DO NOTHING;
+
+-- Initial Badges
+INSERT INTO badges (badge_id, name, description, icon) VALUES
+('b_early', 'Early Bird', 'Completed onboarding on day 1', '🌅'),
+('b_star', 'Rising Star', 'Reached Level 2', '⭐') ON CONFLICT DO NOTHING;
+
+-- Initial Challenges
+INSERT INTO challenges (challenge_id, title, target_count, reward_points, expiry_days, type) VALUES
+('ch_weekly', 'Weekly Warrior', 3, 100, 7, 'Weekly') ON CONFLICT DO NOTHING;
