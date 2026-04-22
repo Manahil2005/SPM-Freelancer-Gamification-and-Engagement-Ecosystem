@@ -1,0 +1,541 @@
+{
+  "info": {
+    "_postman_id": "module11-gamification-collection-v1",
+    "name": "Module 11 — Freelancer Engagement & Gamification API",
+    "description": "Complete Postman collection for Module 11 (Freelancer Engagement & Gamification Ecosystem).\n\nCovers WBS 5.2.1 — All endpoints for WBS 3.1 (Leaderboard), 3.2 (Trust Score), 3.3 (Notifications).\n\nBase URL: http://localhost:5000\n\nFor integration with other modules, replace {{base_url}} with the deployed server address.\n\nSRS Requirements covered: REQ-22 to REQ-45, NFR-1 to NFR-4.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string",
+      "description": "Base URL of the Module 11 backend server"
+    },
+    {
+      "key": "user_id",
+      "value": "u001",
+      "type": "string",
+      "description": "Default test user ID"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "item": [
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Verify the server is running. Returns server status, mode (DUMMY DB or PostgreSQL), and timestamp."
+          },
+          "response": [
+            {
+              "name": "200 OK — Server running",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"status\": \"ok\",\n  \"module\": \"Module 11 — Freelancer Engagement & Gamification\",\n  \"mode\": \"DUMMY DB\",\n  \"timestamp\": \"2026-04-22T10:00:00.000Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WBS 3.1 — Leaderboard Engine",
+      "description": "Endpoints for the Leaderboard & Ranking System.\nSRS: REQ-22, REQ-23, REQ-24, REQ-25, REQ-26, NFR-3\n\nAlgorithm:\n  PRIMARY  sort: points_for_rank DESC\n  TIEBREAK sort: activity_count DESC\n  FINAL    sort: created_at ASC (oldest member wins)",
+      "item": [
+        {
+          "name": "GET All-Time Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?period=all&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [
+                { "key": "period", "value": "all", "description": "all = ranks on total_points (all-time)" },
+                { "key": "limit",  "value": "50",  "description": "Max results (1–100). Default: 50" }
+              ]
+            },
+            "description": "Returns ranked leaderboard sorted by all-time total_points.\n\nREQ-22: Rank by total points\nREQ-25: All-time leaderboard view\nREQ-26: Dynamic update via cache"
+          },
+          "response": [
+            {
+              "name": "200 OK — All-time leaderboard",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"period\": \"all\",\n  \"week_start\": null,\n  \"count\": 5,\n  \"lastRefreshed\": \"2026-04-22T10:00:00.000Z\",\n  \"data\": [\n    {\n      \"rank\": 1,\n      \"user_id\": \"u003\",\n      \"name\": \"Raza Khan\",\n      \"level\": 3,\n      \"total_points\": 3200,\n      \"points_for_rank\": 3200,\n      \"activity_count\": 91\n    },\n    {\n      \"rank\": 2,\n      \"user_id\": \"u001\",\n      \"name\": \"Ali Hassan\",\n      \"level\": 2,\n      \"total_points\": 1850,\n      \"points_for_rank\": 1850,\n      \"activity_count\": 42\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Weekly Leaderboard (Current Week)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?period=weekly&limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [
+                { "key": "period", "value": "weekly", "description": "weekly = ranks on points earned THIS week only" },
+                { "key": "limit",  "value": "50" }
+              ]
+            },
+            "description": "Returns ranked leaderboard for the CURRENT week only.\nRanks on points_earned from weekly_points_log for this ISO week (Monday–Sunday).\nUsers with no activity this week are excluded.\n\nREQ-24: Weekly leaderboard view\nREQ-23: Activity tiebreaker"
+          },
+          "response": [
+            {
+              "name": "200 OK — Weekly leaderboard",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"period\": \"weekly\",\n  \"week_start\": \"2026-04-20\",\n  \"count\": 5,\n  \"lastRefreshed\": \"2026-04-22T10:00:00.000Z\",\n  \"data\": [\n    {\n      \"rank\": 1,\n      \"user_id\": \"u003\",\n      \"name\": \"Raza Khan\",\n      \"level\": 3,\n      \"total_points\": 3200,\n      \"points_for_rank\": 890,\n      \"activity_count\": 23\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Historical Weekly Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard/week/2026-04-13",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard", "week", "2026-04-13"]
+            },
+            "description": "Returns the leaderboard for a specific past week.\nweekStart must be the Monday of the target week in YYYY-MM-DD format.\n\nExample: 2026-04-13 = week of April 13–19, 2026"
+          },
+          "response": [
+            {
+              "name": "200 OK — Historical week leaderboard",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"period\": \"weekly\",\n  \"week_start\": \"2026-04-13\",\n  \"count\": 4,\n  \"data\": [\n    {\n      \"rank\": 1,\n      \"user_id\": \"u003\",\n      \"name\": \"Raza Khan\",\n      \"points_for_rank\": 950,\n      \"activity_count\": 25\n    }\n  ]\n}"
+            },
+            {
+              "name": "400 Bad Request — Invalid date format",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"error\": \"weekStart must be in YYYY-MM-DD format (Monday of the target week).\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET User Rank (All-Time)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard/user/{{user_id}}?period=all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard", "user", "{{user_id}}"],
+              "query": [
+                { "key": "period", "value": "all" }
+              ]
+            },
+            "description": "Returns a specific user's current rank in the all-time leaderboard."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"period\": \"all\",\n  \"rank\": 2,\n  \"name\": \"Ali Hassan\",\n  \"level\": 2,\n  \"total_points\": 1850,\n  \"points_for_rank\": 1850,\n  \"activity_count\": 42\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET User Rank (Weekly)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard/user/{{user_id}}?period=weekly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard", "user", "{{user_id}}"],
+              "query": [
+                { "key": "period", "value": "weekly" }
+              ]
+            },
+            "description": "Returns a specific user's rank in the current week's leaderboard."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"period\": \"weekly\",\n  \"rank\": 3,\n  \"points_for_rank\": 320,\n  \"activity_count\": 8\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Force Refresh Cache",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard", "refresh"]
+            },
+            "description": "Forces an immediate refresh of the leaderboard in-memory cache.\nNormally auto-refreshes every 5 minutes via cron.\nUseful after bulk point award operations.\n\nNFR-3: Leaderboard generation < 3 seconds"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Leaderboard cache refreshed.\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WBS 3.2 — Trust Score Engine",
+      "description": "Endpoints for the Trust Score (Reputation) system.\nSRS: REQ-32, REQ-33, REQ-34, REQ-35\n\nFormula:\n  TrustScore = (AvgRating × 20 × 0.6) + (CompletionRate × 100 × 0.4)\n  Range: 0–100 (enforced at both application and DB level)\n\nModule 1 calls GET /trust-score to display on freelancer profile.\nModule 3 calls POST /recalculate when a project is completed.\nModule 1 calls POST /recalculate when a new rating is posted.",
+      "item": [
+        {
+          "name": "GET Trust Score",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-user-id", "value": "{{user_id}}", "description": "User ID (stub auth)" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score"]
+            },
+            "description": "Returns the current trust score for a user.\nIf not yet calculated, computes and stores it on first call.\n\nThis is the primary endpoint Module 1 consumes to display Trust Score on the freelancer profile.\n\nREQ-34: Display trust score on user profile\nREQ-35: Score must be within range 0–100"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"name\": \"Ali Hassan\",\n  \"trust_score\": 95.6,\n  \"avg_rating\": 4.8,\n  \"completion_rate\": 0.95\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"error\": \"User \\\"u999\\\" not found.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Recalculate Trust Score (Module 1 — New Rating)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avg_rating\": 4.8\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score/recalculate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score", "recalculate"]
+            },
+            "description": "Called by Module 1 when a client posts a new rating for a freelancer.\nSend avg_rating only — completion_rate stays unchanged.\n\nREQ-33: Update score when ratings change\nBody fields (all optional):\n  avg_rating:      0.0 – 5.0\n  completion_rate: 0.0 – 1.0"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"old_trust_score\": 90.4,\n  \"new_trust_score\": 95.6,\n  \"avg_rating\": 4.8,\n  \"completion_rate\": 0.95,\n  \"formula\": \"(4.8 × 20 × 0.6) + (0.95 × 100 × 0.4) = 95.6\"\n}"
+            },
+            {
+              "name": "400 Bad Request — Invalid avg_rating",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"error\": \"avg_rating must be between 0 and 5.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Recalculate Trust Score (Module 3 — Project Completed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completion_rate\": 0.95\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score/recalculate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score", "recalculate"]
+            },
+            "description": "Called by Module 3 when a freelancer completes a project.\nSend completion_rate only — avg_rating stays unchanged.\n\nREQ-33: Update score when completion data changes"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"old_trust_score\": 88.2,\n  \"new_trust_score\": 95.6,\n  \"avg_rating\": 4.8,\n  \"completion_rate\": 0.95,\n  \"formula\": \"(4.8 × 20 × 0.6) + (0.95 × 100 × 0.4) = 95.6\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Trust Score History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score/history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score", "history"]
+            },
+            "description": "Returns all historical trust score calculations for a user.\nMost recent entry is first.\n\nWBS 3.2.3: Implement Trust Score History"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"count\": 2,\n  \"history\": [\n    {\n      \"trust_score\": 95.6,\n      \"avg_rating\": 4.8,\n      \"completion_rate\": 0.95,\n      \"calculated_at\": \"2026-04-22T10:05:00.000Z\"\n    },\n    {\n      \"trust_score\": 90.4,\n      \"avg_rating\": 4.5,\n      \"completion_rate\": 0.95,\n      \"calculated_at\": \"2026-04-21T09:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "WBS 3.3 — Notification Service",
+      "description": "Endpoints for the In-App Notification System.\nSRS: REQ-36, REQ-37, REQ-38, REQ-39, REQ-40, NFR-4\n\n4 Event Types (per SRS 4.8):\n  points    — user earned points\n  level     — user leveled up\n  badge     — user earned a badge\n  challenge — new/completed challenge\n\nNFR-4: Notification delivery within 1 second of trigger event.",
+      "item": [
+        {
+          "name": "GET All Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}?limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}"],
+              "query": [
+                { "key": "limit",       "value": "20",   "description": "Max results (default 20, max 100)" },
+                { "key": "unread_only", "value": "false", "description": "Set true to return unread only" }
+              ]
+            },
+            "description": "Returns all notifications for a user, most recent first.\nIncludes unread_count in the response.\n\nREQ-38: Display notifications in user interface\nREQ-40: Retrieve unread notifications"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"unread_count\": 2,\n  \"count\": 3,\n  \"notifications\": [\n    {\n      \"notification_id\": \"n001\",\n      \"user_id\": \"u001\",\n      \"type\": \"points\",\n      \"message\": \"You earned 50 points for completing a project!\",\n      \"is_read\": false,\n      \"created_at\": \"2026-04-22T09:30:00.000Z\"\n    },\n    {\n      \"notification_id\": \"n002\",\n      \"user_id\": \"u001\",\n      \"type\": \"badge\",\n      \"message\": \"Congratulations! You earned the Rising Star badge!\",\n      \"is_read\": false,\n      \"created_at\": \"2026-04-22T08:00:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Unread Notifications Only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}?unread_only=true",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}"],
+              "query": [
+                { "key": "unread_only", "value": "true" }
+              ]
+            },
+            "description": "Returns only unread notifications for a user.\nUsed by the frontend notification panel to show pending items."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}/unread-count",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}", "unread-count"]
+            },
+            "description": "Returns only the count of unread notifications.\nUsed by the frontend bell icon badge (WBS 4.5.1) to show the red dot/number.\n\nREQ-40: Retrieve unread notifications count"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"unread_count\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT Mark Single Notification as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}/n001/read",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}", "n001", "read"]
+            },
+            "description": "Marks a single notification as read by its ID.\nReplace n001 with the actual notification_id.\n\nREQ-39: Mark notifications as read"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"notification\": {\n    \"notification_id\": \"n001\",\n    \"user_id\": \"u001\",\n    \"type\": \"points\",\n    \"message\": \"You earned 50 points for completing a project!\",\n    \"is_read\": true,\n    \"created_at\": \"2026-04-22T09:30:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Notification \\\"n999\\\" not found for user \\\"u001\\\".\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "PUT Mark ALL Notifications as Read",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}/read-all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}", "read-all"]
+            },
+            "description": "Marks ALL unread notifications for a user as read in one call.\nUsed when the user opens the notification panel.\n\nREQ-39: Mark notifications as read"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "body": "{\n  \"success\": true,\n  \"user_id\": \"u001\",\n  \"marked_read\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Send Notification (Internal/Test)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"u001\",\n  \"type\": \"badge\",\n  \"message\": \"You earned the Challenge Master badge!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/notifications/send",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "send"]
+            },
+            "description": "Manually dispatch a notification to a user.\nPrimarily used for testing or internal admin triggers.\n\nValid type values: points | level | badge | challenge\n\nREQ-36: Generate notifications for key events\nREQ-37: Store notifications in database"
+          },
+          "response": [
+            {
+              "name": "202 Accepted — Queued",
+              "status": "Accepted",
+              "code": 202,
+              "body": "{\n  \"success\": true,\n  \"message\": \"Notification queued for delivery.\"\n}"
+            },
+            {
+              "name": "400 Bad Request — Invalid type",
+              "status": "Bad Request",
+              "code": 400,
+              "body": "{\n  \"success\": false,\n  \"error\": \"Invalid type. Must be one of: points, level, badge, challenge\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Integration Test Flows",
+      "description": "Pre-built flows for testing integration with Modules 1, 3, and 13.\nRun these in order to simulate a complete user journey.",
+      "item": [
+        {
+          "name": "Flow A — Module 1: Fetch Profile Data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score"]
+            },
+            "description": "Module 1 calls this to get trust score + level for freelancer profile display.\nStep 1 of the Module 1 integration flow."
+          },
+          "response": []
+        },
+        {
+          "name": "Flow B — Module 3: Project Completed Event",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completion_rate\": 0.96\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/user/{{user_id}}/trust-score/recalculate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "user", "{{user_id}}", "trust-score", "recalculate"]
+            },
+            "description": "Module 3 calls this when a freelancer completes a project.\nThis triggers a trust score recalculation."
+          },
+          "response": []
+        },
+        {
+          "name": "Flow C — Frontend: Get Leaderboard + User Rank",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/leaderboard?period=weekly",
+              "host": ["{{base_url}}"],
+              "path": ["api", "leaderboard"],
+              "query": [{ "key": "period", "value": "weekly" }]
+            },
+            "description": "Frontend dashboard calls this to render the weekly leaderboard panel."
+          },
+          "response": []
+        },
+        {
+          "name": "Flow D — Frontend: Check Notifications on Login",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/notifications/{{user_id}}/unread-count",
+              "host": ["{{base_url}}"],
+              "path": ["api", "notifications", "{{user_id}}", "unread-count"]
+            },
+            "description": "Frontend calls this on page load to show the bell badge count."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
