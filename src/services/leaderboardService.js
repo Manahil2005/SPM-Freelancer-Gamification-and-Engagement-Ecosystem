@@ -7,14 +7,12 @@
 //   3.1.2 Implement Realtime Leaderboard Calculation API
 //   3.1.3 Implement Leaderboard Caching Strategy (in-memory)
 //
-// Algorithm (per SRS REQ-22, REQ-23, REQ-24, REQ-25, NFR-3):
-//   PRIMARY  sort: total_points DESC
-//   TIEBREAK sort: activity_count DESC (activity frequency)
-//   FINAL    sort: created_at ASC (longest member wins)
+// ALL-TIME board:  ranks on total_points (user_progress table)
+// WEEKLY board:    ranks on points_earned THIS week (weekly_points_log table)
 //
-// Caching: an in-memory snapshot is refreshed every 5 minutes
-//   via a node-cron job registered in index.js.
-//   [DB SWAP] sections show exact spots to replace with pg queries.
+// Tiebreaker in both cases: activity_count DESC → created_at ASC
+//
+// [DB SWAP] sections show exact spots to replace with pg queries.
 // =============================================================
 
 require("dotenv").config();
@@ -25,7 +23,6 @@ const USE_DUMMY = process.env.USE_DUMMY_DB === "true";
 
 // -------------------------------------------------------
 // In-memory cache (WBS 3.1.3)
-// { weekly: [...ranked], all: [...ranked], lastRefreshed: Date }
 // -------------------------------------------------------
 const cache = {
   weekly: null,
@@ -33,101 +30,167 @@ const cache = {
   lastRefreshed: null,
 };
 
-// How many minutes to keep cache alive before forcing refresh
 const CACHE_TTL_MINUTES = 5;
 
 // -------------------------------------------------------
 // Core ranking algorithm (WBS 3.1.1)
 // -------------------------------------------------------
 /**
- * Ranks an array of user objects using the 3-level sort:
- *   1. total_points DESC
- *   2. activity_count DESC (tiebreaker per SRS REQ-23)
- *   3. created_at ASC     (longest member as final tiebreaker)
- *
- * @param {Array} users - raw user rows
- * @returns {Array} ranked users with a `rank` field added
+ * Ranks an array of user objects.
+ * @param {Array} users - each must have: points_for_rank, activity_count, created_at
+ *   plus display fields: user_id, name, level, total_points
+ * @returns {Array} ranked list with `rank` added
  */
 function applyRankingAlgorithm(users) {
   const sorted = [...users].sort((a, b) => {
-    // Primary: more points = higher rank
-    if (b.total_points !== a.total_points) {
-      return b.total_points - a.total_points;
+    // Primary: ranking points DESC (weekly pts or all-time pts depending on board)
+    if (b.points_for_rank !== a.points_for_rank) {
+      return b.points_for_rank - a.points_for_rank;
     }
-
-    // Tiebreaker 1: more activity = higher rank
+    // Tiebreaker 1: more activity this period = higher rank (REQ-23)
     if (b.activity_count !== a.activity_count) {
       return b.activity_count - a.activity_count;
     }
-
-    // Tiebreaker 2: older member wins (joined earlier = more loyal)
+    // Tiebreaker 2: older member wins
     return new Date(a.created_at) - new Date(b.created_at);
   });
 
-  // Attach rank numbers (ties get same rank with gap after, e.g. 1,1,3)
+  // Standard competition ranking: 1,1,3 (not 1,1,2)
   let currentRank = 1;
   return sorted.map((user, idx) => {
     if (idx > 0) {
       const prev = sorted[idx - 1];
       const sameTier =
-        user.total_points === prev.total_points &&
-        user.activity_count === prev.activity_count;
-
+        user.points_for_rank === prev.points_for_rank &&
+        user.activity_count  === prev.activity_count;
       if (!sameTier) currentRank = idx + 1;
     }
-
     return {
-      rank:          currentRank,
-      user_id:       user.user_id,
-      name:          user.name,
-      total_points:  user.total_points,
-      level:         user.level,
-      activity_count: user.activity_count,
+      rank:            currentRank,
+      user_id:         user.user_id,
+      name:            user.name,
+      level:           user.level,
+      total_points:    user.total_points,    // always all-time (for display)
+      points_for_rank: user.points_for_rank, // what the ranking is based on
+      activity_count:  user.activity_count,
     };
   });
 }
 
 // -------------------------------------------------------
-// Data fetching layer (swappable dummy ↔ real DB)
+// Data fetching layer (dummy <-> real DB)
 // -------------------------------------------------------
 
 /**
- * Fetch all users for leaderboard computation.
- * [DB SWAP] Replace dummy block with real pg query when DB is ready.
+ * ALL-TIME leaderboard data: ranks on total_points.
+ * [DB SWAP] Replace dummy block with real pg query.
  */
-async function fetchAllUsers() {
+async function fetchAllTimeData() {
   if (USE_DUMMY) {
-    // Dummy: return in-memory users array
-    return dummy.users;
+    return dummy.users.map((u) => ({
+      user_id:         u.user_id,
+      name:            u.name,
+      level:           u.level,
+      total_points:    u.total_points,
+      points_for_rank: u.total_points,   // all-time board ranks on total_points
+      activity_count:  u.activity_count,
+      created_at:      u.created_at,
+    }));
   }
 
   // [DB SWAP] Real PostgreSQL query:
   // const { rows } = await pool.query(`
-  //   SELECT user_id, name, total_points, level, activity_count, created_at
+  //   SELECT user_id, name, level, total_points,
+  //          total_points AS points_for_rank,
+  //          activity_count, created_at
   //   FROM user_progress
-  //   ORDER BY total_points DESC
   // `);
   // return rows;
 }
 
 /**
- * Fetch users active in the current week only.
- * "Active this week" = activity_count updated within last 7 days.
- * [DB SWAP] Replace with a real query filtering on updated_at.
+ * WEEKLY leaderboard data: ranks on points earned in the CURRENT week only.
+ * Joins weekly_points_log for this week's points with user_progress for display info.
+ * Users with NO activity this week are excluded from the weekly board.
+ * [DB SWAP] Replace dummy block with real pg query.
  */
-async function fetchWeeklyActiveUsers() {
+async function fetchWeeklyData() {
   if (USE_DUMMY) {
-    // Dummy: use all users (no date filtering possible in dummy)
-    // In production this will filter to only users active this week
-    return dummy.users;
+    const thisWeek = dummy.getWeekStart();
+
+    // Get this week's log entries
+    const weekEntries = dummy.weeklyPointsLog.filter(
+      (e) => e.week_start === thisWeek
+    );
+
+    // Join with users for display info
+    return weekEntries.map((entry) => {
+      const user = dummy.users.find((u) => u.user_id === entry.user_id);
+      if (!user) return null;
+      return {
+        user_id:         user.user_id,
+        name:            user.name,
+        level:           user.level,
+        total_points:    user.total_points,    // all-time (for display only)
+        points_for_rank: entry.points_earned,  // weekly board ranks on THIS week's points
+        activity_count:  entry.activity_count, // this week's activity count for tiebreaker
+        created_at:      user.created_at,
+        week_start:      thisWeek,
+      };
+    }).filter(Boolean);
   }
 
   // [DB SWAP] Real PostgreSQL query:
   // const { rows } = await pool.query(`
-  //   SELECT user_id, name, total_points, level, activity_count, created_at
-  //   FROM user_progress
-  //   WHERE updated_at >= NOW() - INTERVAL '7 days'
+  //   SELECT
+  //     up.user_id, up.name, up.level, up.total_points, up.created_at,
+  //     wpl.points_earned  AS points_for_rank,
+  //     wpl.activity_count,
+  //     wpl.week_start
+  //   FROM weekly_points_log wpl
+  //   JOIN user_progress up ON up.user_id = wpl.user_id
+  //   WHERE wpl.week_start = DATE_TRUNC('week', NOW())::DATE
   // `);
+  // return rows;
+}
+
+/**
+ * HISTORICAL weekly leaderboard for a specific past week.
+ * @param {string} weekStart - 'YYYY-MM-DD' Monday of the desired week
+ * [DB SWAP] Replace dummy block with real pg query.
+ */
+async function fetchWeeklyDataForWeek(weekStart) {
+  if (USE_DUMMY) {
+    const weekEntries = dummy.weeklyPointsLog.filter(
+      (e) => e.week_start === weekStart
+    );
+    return weekEntries.map((entry) => {
+      const user = dummy.users.find((u) => u.user_id === entry.user_id);
+      if (!user) return null;
+      return {
+        user_id:         user.user_id,
+        name:            user.name,
+        level:           user.level,
+        total_points:    user.total_points,
+        points_for_rank: entry.points_earned,
+        activity_count:  entry.activity_count,
+        created_at:      user.created_at,
+        week_start:      weekStart,
+      };
+    }).filter(Boolean);
+  }
+
+  // [DB SWAP]:
+  // const { rows } = await pool.query(`
+  //   SELECT
+  //     up.user_id, up.name, up.level, up.total_points, up.created_at,
+  //     wpl.points_earned  AS points_for_rank,
+  //     wpl.activity_count,
+  //     wpl.week_start
+  //   FROM weekly_points_log wpl
+  //   JOIN user_progress up ON up.user_id = wpl.user_id
+  //   WHERE wpl.week_start = $1
+  // `, [weekStart]);
   // return rows;
 }
 
@@ -141,18 +204,14 @@ function isCacheStale() {
   return ageMs > CACHE_TTL_MINUTES * 60 * 1000;
 }
 
-/**
- * Recomputes and stores both leaderboard views in cache.
- * Called by cron job every 5 min and on first request.
- */
 async function refreshCache() {
-  const [allUsers, weeklyUsers] = await Promise.all([
-    fetchAllUsers(),
-    fetchWeeklyActiveUsers(),
+  const [allData, weeklyData] = await Promise.all([
+    fetchAllTimeData(),
+    fetchWeeklyData(),
   ]);
 
-  cache.all    = applyRankingAlgorithm(allUsers);
-  cache.weekly = applyRankingAlgorithm(weeklyUsers);
+  cache.all    = applyRankingAlgorithm(allData);
+  cache.weekly = applyRankingAlgorithm(weeklyData);
   cache.lastRefreshed = new Date();
 
   console.log(`[Leaderboard] Cache refreshed at ${cache.lastRefreshed.toISOString()}`);
@@ -163,25 +222,22 @@ async function refreshCache() {
 // -------------------------------------------------------
 
 /**
- * Get leaderboard for a given period.
- * @param {string} period - "weekly" | "all"
- * @param {number} limit  - max results to return (default 50)
- * @returns {Object} { period, count, data, lastRefreshed }
+ * Get current leaderboard.
+ * @param {string} period  - "weekly" (current week pts) | "all" (total pts)
+ * @param {number} limit   - max results (default 50, capped 100)
  */
 async function getLeaderboard(period = "all", limit = 50) {
   if (!["weekly", "all"].includes(period)) {
     throw new Error(`Invalid period "${period}". Use "weekly" or "all".`);
   }
 
-  // Refresh cache if stale
-  if (isCacheStale()) {
-    await refreshCache();
-  }
+  if (isCacheStale()) await refreshCache();
 
   const data = (cache[period] || []).slice(0, limit);
 
   return {
     period,
+    week_start: period === "weekly" ? dummy.getWeekStart() : null,
     count: data.length,
     lastRefreshed: cache.lastRefreshed,
     data,
@@ -189,9 +245,24 @@ async function getLeaderboard(period = "all", limit = 50) {
 }
 
 /**
+ * Get leaderboard for a specific historical week.
+ * @param {string} weekStart - 'YYYY-MM-DD' Monday of the target week
+ * @param {number} limit
+ */
+async function getWeeklyLeaderboardForWeek(weekStart, limit = 50) {
+  const data = await fetchWeeklyDataForWeek(weekStart);
+  const ranked = applyRankingAlgorithm(data).slice(0, limit);
+
+  return {
+    period: "weekly",
+    week_start: weekStart,
+    count: ranked.length,
+    data: ranked,
+  };
+}
+
+/**
  * Get a single user's rank in a given period.
- * @param {string} userId
- * @param {string} period - "weekly" | "all"
  */
 async function getUserRank(userId, period = "all") {
   if (isCacheStale()) await refreshCache();
@@ -213,4 +284,4 @@ async function forceRefresh() {
   await refreshCache();
 }
 
-module.exports = { getLeaderboard, getUserRank, forceRefresh };
+module.exports = { getLeaderboard, getWeeklyLeaderboardForWeek, getUserRank, forceRefresh };

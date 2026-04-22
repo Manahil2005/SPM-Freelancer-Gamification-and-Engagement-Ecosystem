@@ -7,6 +7,19 @@
 //   inside each service file where marked with: // [DB SWAP]
 // =============================================================
 
+// Helper: returns the Monday (week_start) of a given date as YYYY-MM-DD string
+function getWeekStart(date = new Date()) {
+  const d = new Date(date);
+  const day = d.getUTCDay(); // 0=Sun, 1=Mon...
+  const diff = (day === 0 ? -6 : 1 - day); // shift back to Monday
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+}
+
+const THIS_WEEK = getWeekStart();
+const LAST_WEEK = getWeekStart(new Date(Date.now() - 7  * 24 * 60 * 60 * 1000));
+const TWO_AGO   = getWeekStart(new Date(Date.now() - 14 * 24 * 60 * 60 * 1000));
+
 // Simulated users with gamification data
 const users = [
   {
@@ -14,16 +27,16 @@ const users = [
     name: "Ali Hassan",
     total_points: 1850,
     level: 2,
-    activity_count: 42,    // used as tiebreaker in leaderboard
+    activity_count: 42,    // all-time activity count (tiebreaker for all-time board)
     avg_rating: 4.8,       // out of 5, from Module 1
     completion_rate: 0.95, // 0.0 - 1.0, from Module 3
-    trust_score: null,     // calculated dynamically
+    trust_score: null,     // calculated dynamically, enforced 0-100
     created_at: new Date("2025-11-01"),
   },
   {
     user_id: "u002",
     name: "Sana Mir",
-    total_points: 1850,    // same as u001 → tiebreaker test case
+    total_points: 1850,    // same as u001 -> tiebreaker test case
     level: 2,
     activity_count: 38,
     avg_rating: 4.5,
@@ -65,6 +78,50 @@ const users = [
     created_at: new Date("2025-12-05"),
   },
 ];
+
+// =============================================================
+// Weekly Points Log (mirrors the weekly_points_log DB table)
+// =============================================================
+// Each entry: { user_id, week_start (YYYY-MM-DD), points_earned, activity_count }
+// UNIQUE constraint: one entry per (user_id, week_start) pair.
+// Used ONLY by the weekly leaderboard - ranks on points earned
+// THIS week, not total_points (which is all-time).
+// =============================================================
+const weeklyPointsLog = [
+  // Current week
+  { user_id: "u001", week_start: THIS_WEEK, points_earned: 320, activity_count: 8  },
+  { user_id: "u002", week_start: THIS_WEEK, points_earned: 410, activity_count: 11 },
+  { user_id: "u003", week_start: THIS_WEEK, points_earned: 890, activity_count: 23 },
+  { user_id: "u004", week_start: THIS_WEEK, points_earned:  75, activity_count: 3  },
+  { user_id: "u005", week_start: THIS_WEEK, points_earned: 190, activity_count: 5  },
+  // Previous week
+  { user_id: "u001", week_start: LAST_WEEK, points_earned: 500, activity_count: 13 },
+  { user_id: "u002", week_start: LAST_WEEK, points_earned: 280, activity_count:  7 },
+  { user_id: "u003", week_start: LAST_WEEK, points_earned: 950, activity_count: 25 },
+  { user_id: "u005", week_start: LAST_WEEK, points_earned: 200, activity_count:  6 },
+  // Two weeks ago
+  { user_id: "u001", week_start: TWO_AGO,   points_earned: 400, activity_count: 10 },
+  { user_id: "u003", week_start: TWO_AGO,   points_earned: 700, activity_count: 18 },
+];
+
+/**
+ * Upsert weekly points for a user in the current week.
+ * Mirrors the UPSERT SQL in schema.sql for the real DB.
+ */
+function upsertWeeklyPoints(userId, pointsDelta, activityDelta = 1) {
+  const weekStart = getWeekStart();
+  let entry = weeklyPointsLog.find(
+    (e) => e.user_id === userId && e.week_start === weekStart
+  );
+  if (entry) {
+    entry.points_earned  += pointsDelta;
+    entry.activity_count += activityDelta;
+  } else {
+    entry = { user_id: userId, week_start: weekStart, points_earned: pointsDelta, activity_count: activityDelta };
+    weeklyPointsLog.push(entry);
+  }
+  return entry;
+}
 
 // Trust score history per user
 const trustScoreHistory = {
@@ -123,7 +180,10 @@ let notificationCounter = 6;
 
 module.exports = {
   users,
+  weeklyPointsLog,
   trustScoreHistory,
   notifications,
+  getWeekStart,
+  upsertWeeklyPoints,
   getNextNotificationId: () => `n${String(notificationCounter++).padStart(3, "0")}`,
 };

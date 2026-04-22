@@ -37,17 +37,27 @@ const USE_DUMMY = process.env.USE_DUMMY_DB === "true";
 
 /**
  * Calculates trust score using the official formula.
- * @param {number} avgRating      - 0 to 5
- * @param {number} completionRate - 0.0 to 1.0
+ *
+ * Formula:  (AvgRating × 20 × 0.6) + (CompletionRate × 100 × 0.4)
+ * Range:    0–100  enforced by:
+ *             • this clamp (application layer)
+ *             • CHECK constraint in schema.sql (DB layer)
+ *
+ * @param {number} avgRating      - 0 to 5  (from Module 1)
+ * @param {number} completionRate - 0.0 to 1.0 (from Module 3)
  * @returns {number} trust score rounded to 2 decimal places, clamped 0–100
  */
 function calculateTrustScore(avgRating, completionRate) {
-  const ratingComponent     = avgRating * 20 * 0.6;       // max = 60
-  const completionComponent = completionRate * 100 * 0.4; // max = 40
+  // Guard against NaN / undefined inputs before touching the DB
+  const rating     = isFinite(avgRating)      ? Number(avgRating)      : 0;
+  const completion = isFinite(completionRate) ? Number(completionRate) : 0;
+
+  const ratingComponent     = rating     * 20  * 0.6; // max = 60
+  const completionComponent = completion * 100 * 0.4; // max = 40
 
   const raw = ratingComponent + completionComponent;
 
-  // Clamp to [0, 100] per REQ-35 and SRS Business Rule BR-6
+  // Application-layer clamp — mirrors the DB CHECK (trust_score >= 0 AND <= 100)
   const clamped = Math.min(100, Math.max(0, raw));
 
   return Math.round(clamped * 100) / 100; // 2 decimal precision
