@@ -1,45 +1,39 @@
-// =============================================================
-// src/middleware/auth.js
-// =============================================================
-// Stub authentication middleware.
-// In production: Module 1 will provide a JWT token.
-// For now: we just require an x-user-id header to be present.
-// =============================================================
+// ============================================================
+// middleware/auth.js
+// Module 11 — Authentication Middleware
+// ✅ WBS 5.1.2 — Authentication Middleware for API Security
+// ============================================================
 
 /**
- * Ensures a valid user ID is present in the request.
- * Replace with real JWT verification when Module 1 is integrated.
+ * requireUserId — WBS 5.1.6 / WBS 5.1.2
+ * Verifies that a user ID is present in the request.
+ * In a real deployment this would validate a JWT issued by Module 1.
+ * For now it reads x-user-id and x-user-role headers (Module 1 contract).
  */
 const requireUserId = (req, res, next) => {
-  // Accept user ID from header OR route param
-  const userId = req.headers["x-user-id"] || req.params.userId || req.body?.user_id;
+    // Accept user id from header (set by API gateway / Module 1 auth)
+    const userId = req.headers["x-user-id"] || req.body?.user_id;
 
-  if (!userId) {
-    return res.status(401).json({
-      success: false,
-      error: "Unauthorized: x-user-id header is required.",
-    });
-  }
+    if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized: missing user ID" });
+    }
 
-  req.userId = userId;
-  next();
+    // Attach to request for downstream use
+    req.userId   = parseInt(userId);
+    req.userRole = req.headers["x-user-role"] || "freelancer";
+
+    next();
 };
 
 /**
- * Stub admin check middleware.
- * Replace with real role-based check from Module 1/8 when integrated.
+ * requireAdmin — WBS 5.1.2 — Role-based Access Control
+ * Must be chained after requireUserId.
  */
 const requireAdmin = (req, res, next) => {
-  const role = req.headers["x-user-role"];
-
-  if (role !== "admin") {
-    return res.status(403).json({
-      success: false,
-      error: "Forbidden: Admin role required.",
-    });
-  }
-
-  next();
+    if (req.userRole !== "admin") {
+        return res.status(403).json({ success: false, message: "Forbidden: admin access required" });
+    }
+    next();
 };
 
 module.exports = { requireUserId, requireAdmin };
