@@ -1,120 +1,166 @@
-// =============================================================
-// src/index.js
-// Module 11 — Gamification Backend Entry Point
-// =============================================================
-// Starts the Express server, mounts all routes, and registers
-// the node-cron job that refreshes the leaderboard cache every
-// 5 minutes (WBS 3.1.3).
-// Also seeds badge & onboarding challenge definitions on boot.
-// =============================================================
+// ============================================================
+// controllers/gamificationController.js
+// Module 11 — Gamification Controller
+// ============================================================
 
-require("dotenv").config();
-const express  = require("express");
-const cors     = require("cors");
-const cron     = require("node-cron");
+const gService = require("../services/gamificationService");
+const db       = require("../db/pool");
 
-const leaderboardRoutes   = require("./routes/leaderboard");
-const trustScoreRoutes    = require("./routes/trustScore");
-const notificationRoutes  = require("./routes/notifications");
-const leaderboardService  = require("./services/leaderboardService");
-const gamificationRoutes  = require("./routes/gamification");
-
-// ✅ WBS 2.2.1 — Badge + Onboarding seeder (runs once on startup)
-const { seedBadges, seedOnboardingChallenges } = require("./services/badgeService");
-
-const app  = express();
-const PORT = process.env.PORT || 5000;
-
-// -------------------------------------------------------
-// Global Middleware
-// -------------------------------------------------------
-app.use(cors());
-app.use(express.json());
-
-// Simple request logger
-app.use((req, _res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-    next();
-});
-
-// -------------------------------------------------------
-// Health Check
-// -------------------------------------------------------
-app.get("/health", (_req, res) => {
-    res.json({
-        status:    "ok",
-        module:    "Module 11 — Freelancer Engagement & Gamification",
-        mode:      process.env.USE_DUMMY_DB === "true" ? "DUMMY DB" : "REAL DB (PostgreSQL)",
-        timestamp: new Date().toISOString()
-    });
-});
-
-// -------------------------------------------------------
-// Mount Routes
-// -------------------------------------------------------
-// WBS 3.1 — Leaderboard
-app.use("/api/leaderboard", leaderboardRoutes);
-
-// WBS 3.2 — Trust Score  (grouped under /api/user)
-app.use("/api/user", trustScoreRoutes);
-
-// WBS 3.3 — Notifications
-app.use("/api/notifications", notificationRoutes);
-
-// WBS 2.1 / 2.2 / 5.1 — Gamification
-// 🔄 Updated: comment fixed from "WBS 2,5.1" → proper WBS references
-app.use("/api/gamification", gamificationRoutes);
-
-// -------------------------------------------------------
-// 404 Handler
-// -------------------------------------------------------
-app.use((_req, res) => {
-    res.status(404).json({ success: false, error: "Endpoint not found." });
-});
-
-// -------------------------------------------------------
-// Global Error Handler
-// -------------------------------------------------------
-app.use((err, _req, res, _next) => {
-    console.error("[Server Error]", err.stack);
-    res.status(500).json({ success: false, error: "Unexpected server error." });
-});
-
-// -------------------------------------------------------
-// node-cron: Leaderboard Cache Refresh (WBS 3.1.3)
-// Runs every 5 minutes to keep the in-memory leaderboard
-// snapshot up to date without blocking API requests.
-// -------------------------------------------------------
-cron.schedule("*/5 * * * *", async () => {
+// ============================================================
+// WBS 2.1.2 — Points Award API (POST /api/gamification/points/award)
+// 🔄 Updated for new DB schema:
+//    admin_audit_logs → gamification_admin_audit_logs
+//    admin_id (VARCHAR) → admin_id (INTEGER FK to users)
+//    columns: (admin_id, action, target_user, ip_address)
+//           → (admin_id, action, target_user_id, ip_address)
+// ============================================================
+const handleAwardPoints = async (req, res) => {
     try {
-        await leaderboardService.forceRefresh();
-    } catch (err) {
-        console.error("[CRON] Leaderboard refresh failed:", err.message);
-    }
-});
+        // WBS 5.1.5: Input Sanitization
+        const userId     = req.body.user_id;
+        const actionType = String(req.body.action_type || "").trim();
+        const points     = parseInt(req.body.points);
 
-// -------------------------------------------------------
-// Start Server + Seed on Boot
-// ✅ WBS 2.2.1 — Badge definitions seeded at startup
-// ✅ WBS 4.2   — Onboarding challenge definitions seeded
-// -------------------------------------------------------
-app.listen(PORT, async () => {
-    console.log("================================================");
-    console.log(`  Module 11 Backend running on port ${PORT}`);
-    console.log(`  Mode: ${process.env.USE_DUMMY_DB === "true" ? "DUMMY DB" : "PostgreSQL"}`);
-    console.log(`  Health: http://localhost:${PORT}/health`);
-    console.log("================================================");
-
-    // Seed badge & onboarding data — safe to run on every boot
-    // (uses ON CONFLICT DO NOTHING, so it's idempotent)
-    if (process.env.USE_DUMMY_DB !== "true") {
-        try {
-            await seedBadges();
-            await seedOnboardingChallenges();
-        } catch (err) {
-            console.error("[Seeder] Failed to seed badges/challenges:", err.message);
+        if (!userId || !actionType || isNaN(points)) {
+            return res.status(400).json({ success: false, message: "Missing or invalid fields" });
         }
-    }
-});
 
-module.exports = app;
+        const result = await gService.awardPoints(userId, actionType, points);
+
+        // ✅ WBS 2.2 — Evaluate badges after every point award
+        // Runs asynchronously; errors are logged but do not fail the response
+        gService.evaluateBadges(userId).catch(err =>
+            console.error("[Badge Engine] Evaluation failed for user", userId, err.message)
+        );
+
+        // WBS 5.1.3: Security Audit Logging — admin actions only
+        // 🔄 Updated: table gamification_admin_audit_logs
+        //             admin_id is an integer (FK to users), not 'admin_01'
+        //             column target_user_id (not target_user)
+        if (req.userRole === "admin" || req.headers["x-user-role"] === "admin") {
+            const adminId = req.userId || null; // set by auth middleware
+            await db.query(
+                `INSERT INTO gamification_admin_audit_logs
+                     (admin_id, action, target_user_id, ip_address)
+                 VALUES ($1, $2, $3, $4)`,
+                [adminId, `Manual Point Award: ${actionType}`, userId, req.ip]
+            );
+        }
+
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// ✅ WBS 2.2.3 — Get User Badges
+// GET /api/gamification/user/:userId/badges
+// ============================================================
+const handleGetUserBadges = async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid userId" });
+        }
+        const badges = await gService.getUserBadges(userId);
+        res.status(200).json({ success: true, data: badges });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// ✅ WBS 5.1.4 — User Profile Endpoint (consumed by Module 1)
+// GET /api/gamification/user/:userId/profile
+// Returns points, level, trust_score, top 3 badges
+// ============================================================
+const handleGetUserProfile = async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid userId" });
+        }
+        const profile = await gService.getUserProfile(userId);
+        res.status(200).json({ success: true, data: profile });
+    } catch (error) {
+        res.status(404).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// ✅ WBS 4.2 — Onboarding Controllers
+// ============================================================
+
+// GET /api/gamification/user/:userId/onboarding
+const handleGetOnboarding = async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid userId" });
+        }
+        const progress = await gService.getOnboardingProgress(userId);
+        res.status(200).json({ success: true, data: progress });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+// POST /api/gamification/user/:userId/onboarding/:stepCode
+const handleCompleteOnboardingStep = async (req, res) => {
+    try {
+        const userId   = parseInt(req.params.userId);
+        const stepCode = String(req.params.stepCode || "").trim().toUpperCase();
+
+        if (isNaN(userId) || !stepCode) {
+            return res.status(400).json({ success: false, message: "Invalid userId or stepCode" });
+        }
+
+        const result = await gService.completeOnboardingStep(userId, stepCode);
+
+        if (result.alreadyCompleted) {
+            return res.status(200).json({
+                success: true,
+                message: "Step already completed",
+                data:    result
+            });
+        }
+
+        // Evaluate badges after onboarding step
+        gService.evaluateBadges(userId).catch(err =>
+            console.error("[Badge Engine] Evaluation failed for user", userId, err.message)
+        );
+
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        res.status(400).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
+// ✅ WBS 5.1.2 — Admin: Get Audit Logs
+// GET /api/gamification/admin/audit-logs
+// 🔄 Updated: table gamification_admin_audit_logs
+// ============================================================
+const handleGetAuditLogs = async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT log_id, admin_id, action, target_user_id, ip_address, created_at
+             FROM gamification_admin_audit_logs
+             ORDER BY created_at DESC
+             LIMIT 100`
+        );
+        res.status(200).json({ success: true, data: result.rows });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+module.exports = {
+    handleAwardPoints,
+    handleGetUserBadges,
+    handleGetUserProfile,
+    handleGetOnboarding,
+    handleCompleteOnboardingStep,
+    handleGetAuditLogs
+};
