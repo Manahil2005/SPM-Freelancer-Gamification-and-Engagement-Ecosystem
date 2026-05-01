@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS user_progress (
     avg_rating      NUMERIC(3,2)  NOT NULL DEFAULT 0.0, -- from Module 1
     completion_rate NUMERIC(5,4)  NOT NULL DEFAULT 0.0, -- from Module 3
     trust_score     NUMERIC(5,2)  DEFAULT NULL,
+                    CHECK (trust_score IS NULL OR (trust_score >= 0 AND trust_score <= 100)),
+
     created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
@@ -36,12 +38,48 @@ CREATE TABLE IF NOT EXISTS leaderboard_cache (
     period          VARCHAR(10)   NOT NULL CHECK (period IN ('weekly', 'all')),
     user_id         VARCHAR(50)   NOT NULL REFERENCES user_progress(user_id),
     rank            INTEGER       NOT NULL,
-    total_points    INTEGER       NOT NULL,
+    points_for_rank INTEGER       NOT NULL, -- weekly pts for 'weekly', total pts for 'all'
+    total_points    INTEGER       NOT NULL, -- always all-time total (for display)
     activity_count  INTEGER       NOT NULL,
+    week_start      DATE          DEFAULT NULL, -- set only when period='weekly'
     snapshot_at     TIMESTAMPTZ   NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_leaderboard_period ON leaderboard_cache(period, rank);
+
+- -------------------------------------------------------
+-- 3.1a — Weekly Points Log
+-- -------------------------------------------------------
+-- Tracks how many points each user earns in each ISO week.
+-- Used to rank the WEEKLY leaderboard on points earned THIS
+-- week only — not total_points (which is all-time).
+--
+-- week_start: Monday 00:00 UTC of the ISO week (DATE_TRUNC('week', NOW()))
+-- points_earned: cumulative points added in that week for that user
+-- activity_count: actions performed in that week (weekly tiebreaker)
+--
+-- When a user earns points:
+--   INSERT INTO weekly_points_log (user_id, week_start, points_earned, activity_count)
+--   VALUES ($1, DATE_TRUNC('week', NOW()), $2, 1)
+--   ON CONFLICT (user_id, week_start)
+--   DO UPDATE SET
+--     points_earned  = weekly_points_log.points_earned  + EXCLUDED.points_earned,
+--     activity_count = weekly_points_log.activity_count + EXCLUDED.activity_count,
+--     updated_at     = NOW();
+CREATE TABLE IF NOT EXISTS weekly_points_log (
+    id              SERIAL        PRIMARY KEY,
+    user_id         VARCHAR(50)   NOT NULL REFERENCES user_progress(user_id),
+    week_start      DATE          NOT NULL, -- Monday of the ISO week
+    points_earned   INTEGER       NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
+    activity_count  INTEGER       NOT NULL DEFAULT 0 CHECK (activity_count >= 0),
+    updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, week_start)             -- one row per user per week
+);
+ 
+CREATE INDEX IF NOT EXISTS idx_weekly_points_week  ON weekly_points_log(week_start, points_earned DESC);
+CREATE INDEX IF NOT EXISTS idx_weekly_points_user  ON weekly_points_log(user_id, week_start DESC);
+
+
 
 -- -------------------------------------------------------
 -- 3.2 — Trust Score History
@@ -149,6 +187,28 @@ CREATE TABLE IF NOT EXISTS user_onboarding (
 -- -------------------------------------------------------
 -- Seed dummy data for local development / testing
 -- -------------------------------------------------------
+-- -------------------------------------------------------
+-- Seed weekly_points_log — current week + two prior weeks
+-- DATE_TRUNC('week', NOW()) gives the Monday of this week.
+-- -------------------------------------------------------
+INSERT INTO weekly_points_log (user_id, week_start, points_earned, activity_count)
+VALUES
+  -- Current week (week of 2026-04-20)
+  ('u001', DATE_TRUNC('week', NOW())::DATE,  320, 8),
+  ('u002', DATE_TRUNC('week', NOW())::DATE,  410, 11),
+  ('u003', DATE_TRUNC('week', NOW())::DATE,  890, 23),
+  ('u004', DATE_TRUNC('week', NOW())::DATE,   75, 3),
+  ('u005', DATE_TRUNC('week', NOW())::DATE,  190, 5),
+  -- Previous week (week of 2026-04-13)
+  ('u001', (DATE_TRUNC('week', NOW()) - INTERVAL '7 days')::DATE, 500, 13),
+  ('u002', (DATE_TRUNC('week', NOW()) - INTERVAL '7 days')::DATE, 280, 7),
+  ('u003', (DATE_TRUNC('week', NOW()) - INTERVAL '7 days')::DATE, 950, 25),
+  ('u005', (DATE_TRUNC('week', NOW()) - INTERVAL '7 days')::DATE, 200, 6),
+  -- Two weeks ago (week of 2026-04-06)
+  ('u001', (DATE_TRUNC('week', NOW()) - INTERVAL '14 days')::DATE, 400, 10),
+  ('u003', (DATE_TRUNC('week', NOW()) - INTERVAL '14 days')::DATE, 700, 18)
+ON CONFLICT (user_id, week_start) DO NOTHING;
+
 INSERT INTO user_progress (user_id, name, total_points, level, activity_count, avg_rating, completion_rate, created_at)
 VALUES
   ('u001', 'Ali Hassan',   1850, 2, 42, 4.80, 0.9500, '2025-11-01'),

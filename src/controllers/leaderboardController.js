@@ -53,6 +53,33 @@ async function getUserRank(req, res) {
 }
 
 /**
+ * GET /api/leaderboard/week/:weekStart
+ * Returns the leaderboard for a specific historical week.
+ * weekStart must be a Monday in YYYY-MM-DD format.
+ */
+async function getWeeklyLeaderboardForWeek(req, res) {
+  try {
+    const { weekStart } = req.params;
+    const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+
+    // Validate YYYY-MM-DD format
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(weekStart)) {
+      return res.status(400).json({
+        success: false,
+        error: "weekStart must be in YYYY-MM-DD format (Monday of the target week).",
+      });
+    }
+
+    const result = await leaderboardService.getWeeklyLeaderboardForWeek(weekStart, limit);
+
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    console.error("[Leaderboard] getWeeklyLeaderboardForWeek error:", err.message);
+    return res.status(500).json({ success: false, error: "Internal server error." });
+  }
+}
+
+/**
  * POST /api/leaderboard/refresh
  * Force-refresh the leaderboard cache (admin only in production).
  */
@@ -66,4 +93,4 @@ async function forceRefresh(req, res) {
   }
 }
 
-module.exports = { getLeaderboard, getUserRank, forceRefresh };
+module.exports = { getLeaderboard, getUserRank, getWeeklyLeaderboardForWeek, forceRefresh };
