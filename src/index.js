@@ -19,6 +19,7 @@ const notificationRoutes  = require("./routes/notifications");
 const leaderboardService  = require("./services/leaderboardService");
 const gamificationRoutes  = require("./routes/gamification");
 const challengeRoutes     = require("./routes/challenges");          // ✅ WBS 2.4
+const adminConfigRoutes   = require("./routes/adminConfig"); 
 
 // ✅ WBS 2.2.1 — Badge + Onboarding seeder (runs once on startup)
 // ✅ WBS 2.4   — Timed challenge seeder
@@ -73,6 +74,8 @@ app.use("/api/gamification", gamificationRoutes);
 
 // ✅ WBS 2.4 — Time-Based Challenges (daily / weekly / monthly)
 app.use("/api/gamification", challengeRoutes);
+
+app.use("/api/gamification/admin", adminConfigRoutes);
 
 // -------------------------------------------------------
 // 404 Handler
