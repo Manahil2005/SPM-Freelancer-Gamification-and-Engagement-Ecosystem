@@ -104,6 +104,26 @@ router.put("/level-thresholds", async (req, res) => {
 // POST /api/gamification/admin/badges
 // PATCH /api/gamification/admin/badges/:badgeCode
 // ============================================================
+
+router.post("/badges", async (req, res) => {
+    const { badge_code, name, description, category, points_awarded } = req.body;
+    if (!badge_code || !name) {
+        return res.status(400).json({ success: false, message: "badge_code and name are required" });
+    }
+    try {
+        const result = await db.query(
+            `INSERT INTO gamification_badges
+                 (badge_code, name, description, category, points_awarded)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING *`,
+            [badge_code.toUpperCase(), name, description, category || "milestone", points_awarded || 0]
+        );
+        res.status(201).json({ success: true, data: result.rows[0] });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
+});
+
 router.get("/badges", async (_req, res) => {
     try {
         const result = await db.query(
@@ -121,6 +141,25 @@ router.patch("/badges/:badgeCode", async (req, res) => {
         const badgeCode = req.params.badgeCode.toUpperCase();
         const updated   = await updateBadgeConfig(badgeCode, req.body);
         res.status(200).json({ success: true, data: updated });
+    } catch (err) {
+        res.status(400).json({ success: false, message: err.message });
+    }
+});
+
+router.delete("/badges/:badgeCode", async (req, res) => {
+    try {
+        const badgeCode = req.params.badgeCode.toUpperCase();
+        const result = await db.query(
+            `UPDATE gamification_badges 
+             SET is_active = FALSE 
+             WHERE badge_code = $1
+             RETURNING badge_code, name, is_active`,
+            [badgeCode]
+        );
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Badge not found" });
+        }
+        res.status(200).json({ success: true, data: result.rows[0] });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }
