@@ -18,9 +18,12 @@ const trustScoreRoutes    = require("./routes/trustScore");
 const notificationRoutes  = require("./routes/notifications");
 const leaderboardService  = require("./services/leaderboardService");
 const gamificationRoutes  = require("./routes/gamification");
+const challengeRoutes     = require("./routes/challenges");          // ✅ WBS 2.4
 
 // ✅ WBS 2.2.1 — Badge + Onboarding seeder (runs once on startup)
-const { seedBadges, seedOnboardingChallenges } = require("./services/badgeService");
+// ✅ WBS 2.4   — Timed challenge seeder
+const { seedBadges, seedOnboardingChallenges, seedTimedChallenges } = require("./services/badgeService");
+const { expireStaleUserChallenges } = require("./services/challengeService");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -28,7 +31,11 @@ const PORT = process.env.PORT || 5000;
 // -------------------------------------------------------
 // Global Middleware
 // -------------------------------------------------------
-app.use(cors());
+app.use(cors({
+    origin: "http://localhost:5173",
+    allowedHeaders: ["Content-Type", "x-user-id", "x-user-role"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
+}));
 app.use(express.json());
 
 // Simple request logger
@@ -62,8 +69,10 @@ app.use("/api/user", trustScoreRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 // WBS 2.1 / 2.2 / 5.1 — Gamification
-// 🔄 Updated: comment fixed from "WBS 2,5.1" → proper WBS references
 app.use("/api/gamification", gamificationRoutes);
+
+// ✅ WBS 2.4 — Time-Based Challenges (daily / weekly / monthly)
+app.use("/api/gamification", challengeRoutes);
 
 // -------------------------------------------------------
 // 404 Handler
@@ -93,6 +102,15 @@ cron.schedule("*/5 * * * *", async () => {
     }
 });
 
+// ✅ WBS 2.4.4 — Expire stale timed challenges every hour
+cron.schedule("0 * * * *", async () => {
+    try {
+        await expireStaleUserChallenges();
+    } catch (err) {
+        console.error("[CRON] Challenge expiry failed:", err.message);
+    }
+});
+
 // -------------------------------------------------------
 // Start Server + Seed on Boot
 // ✅ WBS 2.2.1 — Badge definitions seeded at startup
@@ -111,6 +129,7 @@ app.listen(PORT, async () => {
         try {
             await seedBadges();
             await seedOnboardingChallenges();
+            await seedTimedChallenges();             // ✅ WBS 2.4
         } catch (err) {
             console.error("[Seeder] Failed to seed badges/challenges:", err.message);
         }

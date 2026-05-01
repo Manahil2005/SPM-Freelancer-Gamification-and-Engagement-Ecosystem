@@ -11,17 +11,20 @@
  * For now it reads x-user-id and x-user-role headers (Module 1 contract).
  */
 const requireUserId = (req, res, next) => {
-    // Accept user id from header (set by API gateway / Module 1 auth)
-    const userId = req.headers["x-user-id"] || req.body?.user_id;
+    // TEMP: allow requests with user ID in URL params
+    const userId =
+        req.headers["x-user-id"] ||
+        req.headers["x-user-id".toLowerCase()] ||
+        req.body?.user_id ||
+        req.query?.user_id ||
+        req.params?.userId;  // ← add this line
 
     if (!userId) {
         return res.status(401).json({ success: false, message: "Unauthorized: missing user ID" });
     }
 
-    // Attach to request for downstream use
     req.userId   = parseInt(userId);
     req.userRole = req.headers["x-user-role"] || "freelancer";
-
     next();
 };
 

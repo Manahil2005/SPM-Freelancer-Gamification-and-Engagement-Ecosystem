@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 // =============================================================
 // AchievementsPage.jsx — Page 9
@@ -25,8 +25,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 //   Badges come from gamification_badges + gamification_user_badges
 // =============================================================
 
-const API_BASE   = "";
-const CURRENT_USER_ID = "u001";
+const API_BASE        = import.meta.env.REACT_APP_API_BASE || "http://localhost:5000";
+const CURRENT_USER_ID = parseInt(import.meta.env.REACT_APP_USER_ID || "1", 10);
 
 // ── Nexus light theme colors (matching LeaderboardPage) ───────
 const C = {
@@ -713,42 +713,45 @@ export default function AchievementsPage() {
   const levelScrollRef = useRef(null);
 
   // ── Fetch user level & points ─────────────────────────────
-  const fetchUserData = useCallback(async () => {
-    setLoading(true); setError(null);
-    try {
-      // Fetch leaderboard to get current user's points + level
-      const res  = await fetch(`${API_BASE}/api/leaderboard?period=all&limit=50`, {
-        headers: { "x-user-id": CURRENT_USER_ID },
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const me   = (data.data || []).find(u => String(u.user_id) === String(CURRENT_USER_ID));
-      if (me) {
-        setUserLevel(me.level || 1);
-        setUserPoints(me.total_points || 0);
-      }
-
-      // Fetch badges
-      const badgeRes = await fetch(`${API_BASE}/api/user/${CURRENT_USER_ID}/badges`, {
-        headers: { "x-user-id": CURRENT_USER_ID },
-      });
-      if (badgeRes.ok) {
-        const badgeData = await badgeRes.json();
-        if (badgeData.success) {
-          setEarnedBadges((badgeData.badges || []).map(b => b.badge_code || b.badge_id));
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true); setError(null);
+      try {
+        // WBS 5.1.4 — Fetch user profile: total_points + current_level
+        const profileRes = await fetch(
+          `${API_BASE}/api/gamification/user/${CURRENT_USER_ID}/profile`,
+          { headers: { "x-user-id": CURRENT_USER_ID } }
+        );
+        if (!profileRes.ok) throw new Error(`HTTP ${profileRes.status}`);
+        const profileData = await profileRes.json();
+        if (profileData.success && profileData.data) {
+          setUserLevel(profileData.data.current_level || 1);
+          setUserPoints(profileData.data.total_points  || 0);
         }
-      }
-    } catch (err) {
-      setError(`Could not load achievements: ${err.message}`);
-      // Use sensible defaults so page still renders
-      setUserLevel(1);
-      setUserPoints(0);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
-  useEffect(() => { fetchUserData(); }, [fetchUserData]);
+        // WBS 2.2.3 — Fetch earned badges for this user
+        const badgeRes = await fetch(
+          `${API_BASE}/api/gamification/user/${CURRENT_USER_ID}/badges`,
+          { headers: { "x-user-id": CURRENT_USER_ID } }
+        );
+        if (badgeRes.ok) {
+          const badgeData = await badgeRes.json();
+          if (badgeData.success) {
+            // Backend returns badge_code on each row (gamificationService.getUserBadges)
+            setEarnedBadges((badgeData.data || []).map(b => (b.badge_code || "").toLowerCase()));
+          }
+        }
+      } catch (err) {
+        setError(`Could not load achievements: ${err.message}`);
+        // Use sensible defaults so page still renders
+        setUserLevel(1);
+        setUserPoints(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   // ── Visible badges for current page ───────────────────────
   const filteredBadges = showMyOnly
