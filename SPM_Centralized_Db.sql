@@ -1759,4 +1759,137 @@ AFTER INSERT OR UPDATE ON reviews
 FOR EACH ROW EXECUTE FUNCTION update_profile_ratings();
 */
 
+INSERT INTO users (email, password_hash, first_name, last_name, role)
+VALUES (
+    'manahil@example.com', 
+    'dummy_hash_123', 
+    'Manahil', 
+    'User', 
+    'freelancer'
+);
+
+Select * from users
+
+INSERT INTO gamification_user_progress (
+    user_id, 
+    total_points, 
+    current_level, 
+    trust_score, 
+    streak_days, 
+    last_activity_date
+) VALUES (
+    1,       -- Assuming user with ID 1 exists
+    1500,    -- Starting XP
+    5,       -- Level
+    98.50,   -- Trust Score
+    3,       -- Day streak
+    CURRENT_DATE
+);
+
+Select * from gamification_level_definitions
+DELETE FROM gamification_user_badges WHERE user_id = 1;
+INSERT INTO users (email, password_hash, first_name, last_name, role)
+VALUES ('test@nexus.com', 'hashed_password', 'Alex', 'Sterling', 'freelancer')
+ON CONFLICT DO NOTHING;
+
+SELECT * FROM gamification_weekly_points_log where user_id='1'
+
+-- Create a test user if none exists
+INSERT INTO users (email, password_hash, first_name, last_name, role, account_status)
+VALUES (
+    'test@example.com',
+    'temporary_hash_replace_me',
+    'Test',
+    'User',
+    'freelancer',
+    'active'
+) ON CONFLICT (email) DO NOTHING
+RETURNING id;
+
+-- Create profile for the user
+INSERT INTO profiles (user_id, headline, reputation_level, tier_level)
+SELECT id, 'New Member', 1, 'beginner'
+FROM users 
+WHERE email = 'test@example.com'
+ON CONFLICT (user_id) DO NOTHING;
+
+-- Initialize gamification progress
+INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+SELECT id, 0, 1, 0
+FROM users 
+WHERE email = 'test@example.com'
+ON CONFLICT (user_id) DO NOTHING;
+
+
+-- Verify tables exist
+SELECT * FROM gamification_badges;
+SELECT * FROM gamification_level_definitions;
+SELECT * FROM gamification_user_progress;
+
+-- This will delete all users and cascade to all related tables
+DELETE FROM users;
+
+SELECT u.id, u.email, u.role, 
+                gp.total_points, gp.current_level, gp.activity_count,
+                array_agg(DISTINCT gb.badge_code) as badges
+         FROM users u
+         LEFT JOIN gamification_user_progress gp ON gp.user_id = u.id
+         LEFT JOIN gamification_user_badges gub ON gub.user_id = u.id
+         LEFT JOIN gamification_badges gb ON gb.id = gub.badge_id
+         WHERE u.id = 1
+         GROUP BY u.id, gp.total_points, gp.current_level, gp.activity_count
+		 
+-- Step 1: Insert users
+INSERT INTO users (id, first_name, last_name, email, password_hash) VALUES 
+(1, 'Raza', 'Khan', 'raza@test.com', 'dummy_hash_1'), 
+(2, 'Ali', 'Hassan', 'ali@test.com', 'dummy_hash_2'), 
+(3, 'Sana', 'Mir', 'sana@test.com', 'dummy_hash_3'), 
+(4, 'Hamza', 'Tariq', 'hamza@test.com', 'dummy_hash_4'), 
+(5, 'Fatima', 'Zahra', 'fatima@test.com', 'dummy_hash_5')
+ON CONFLICT DO NOTHING;
+
+
+-- Step 2: Insert user progress
+INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count, avg_rating, completion_rate) VALUES 
+(1, 3200, 3, 91, 4.90, 0.99), 
+(2, 1850, 2, 42, 4.80, 0.95), 
+(3, 1850, 2, 38, 4.50, 0.88), 
+(4, 1100, 2, 25, 4.20, 0.80), 
+(5, 720, 1, 17, 3.80, 0.72)
+ON CONFLICT DO NOTHING;
+
+-- Step 3: Insert weekly points
+INSERT INTO gamification_weekly_points_log (user_id, week_start, points_earned, activity_count) VALUES 
+(1, DATE_TRUNC('week', NOW())::DATE, 890, 23), 
+(2, DATE_TRUNC('week', NOW())::DATE, 320, 8), 
+(3, DATE_TRUNC('week', NOW())::DATE, 410, 11), 
+(4, DATE_TRUNC('week', NOW())::DATE, 190, 5), 
+(5, DATE_TRUNC('week', NOW())::DATE, 75, 3)
+ON CONFLICT DO NOTHING;
+select * from gamification_weekly_points_log
+-- Step 4: Insert notifications
+INSERT INTO gamification_notifications (user_id, notification_type, title, message) VALUES 
+(1, 'points', 'Points Earned', 'You earned 50 points for completing a project!'), 
+(1, 'badge', 'Badge Unlocked', 'Congratulations! You earned the Rising Star badge!'), 
+(1, 'level', 'Level Up!', 'You are now Level 3 - Advanced!'), 
+(2, 'challenge', 'Challenge Update', 'New weekly challenge: Complete 3 projects this week!'), 
+(3, 'points', 'Points Earned', 'You earned 100 points for a 5-star client rating!') 
+ON CONFLICT DO NOTHING;
+
+-- Step 5: Insert badges
+INSERT INTO gamification_badges (badge_code, name, description, category, points_awarded) VALUES 
+('FIRST_PROJECT', 'First Project', 'Completed your first project on the platform', 'achievement', 100), 
+('RISING_STAR', 'Rising Star', 'Reached Level 2 and earned 500+ points', 'achievement', 150), 
+('CONSISTENT_PERFORMER', 'Consistent Performer', 'Maintained a 7-day activity streak', 'achievement', 200), 
+('TOP_RATED', 'Top Rated', 'Received an average rating of 4.5 or above', 'achievement', 250), 
+('CHALLENGE_MASTER', 'Challenge Master', 'Completed 10 challenges', 'achievement', 300) 
+ON CONFLICT (badge_code) DO NOTHING;
+delete from gamification_badges
+-- Step 6: Give user 1 some badges
+INSERT INTO gamification_user_badges (user_id, badge_id) 
+SELECT 1, id FROM gamification_badges 
+WHERE badge_code IN ('first_project', 'rising_star') 
+ON CONFLICT DO NOTHING;
+
+select * from users
 

@@ -8,11 +8,11 @@ const db = require("../db/pool");
 // 🔄 Updated for new DB schema (WBS 2.5.1 / 2.5.2)
 // Level config now sourced from gamification_level_definitions table.
 // Fallback hardcoded config kept for startup before DB seed.
-const LEVEL_CONFIG = [
-    { level: 1, minPoints: 0,    label: "Beginner"     },
-    { level: 2, minPoints: 500,  label: "Intermediate" },
-    { level: 3, minPoints: 1500, label: "Advanced"     }
-];
+//const LEVEL_CONFIG = [
+//    { level: 1, minPoints: 0,    label: "Beginner"     },
+//    { level: 2, minPoints: 500,  label: "Intermediate" },
+//    { level: 3, minPoints: 1500, label: "Advanced"     }
+//];
 
 // ============================================================
 // WBS 2.1.3 — Points Earning Logic (Atomic Update)
@@ -61,8 +61,15 @@ const awardPoints = async (userId, actionType, points) => {
 
         // WBS 2.3.1 — Level Advancement Logic
         // 🔄 Updated: current_level column (was: level)
-        const newLevel = [...LEVEL_CONFIG].reverse()
-            .find(l => user.total_points >= l.minPoints).level;
+        const levelRes = await client.query(
+            `SELECT level_number, title FROM gamification_level_definitions
+            WHERE min_points <= $1
+            ORDER BY min_points DESC
+            LIMIT 1`,
+            [user.total_points]
+        );
+        const newLevel = levelRes.rows.length > 0 ? levelRes.rows[0].level_number : 1;
+        const newLabel = levelRes.rows.length > 0 ? levelRes.rows[0].title : "Beginner";
 
         if (newLevel > user.current_level) {
             await client.query(
