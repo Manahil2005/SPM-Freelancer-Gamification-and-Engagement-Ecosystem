@@ -58,17 +58,19 @@ const MODULES = [
 ];
 
 const WHO_WE_ARE = [
-  { icon: "🇵🇰", title: "Pakistan's National Platform", desc: "Built to empower every Pakistani freelancer — from Karachi to Gilgit — with verified skills and fair opportunities." },
-  { icon: "🔐", title: "Verified & Trusted", desc: "CNIC-linked identity verification, proctored skill tests, and escrow payments ensure every transaction is safe." },
-  { icon: "🚀", title: "Gamified Growth", desc: "Level up, earn badges, and climb leaderboards. Your reputation grows with every completed project." },
-  { icon: "🤝", title: "Community First", desc: "Social impact projects, volunteer missions, and a thriving network of 50,000+ professionals." },
+  { icon: "🎓", title: "FAST NUCES Islamabad", desc: "Built by a full class of CS students at FAST-NUCES Islamabad as our Software Project Management capstone — real code, real teamwork, real deadlines." },
+  { icon: "🔐", title: "Verified & Trusted", desc: "CNIC-linked identity, proctored skill tests, and escrow payments — every transaction is safe and every freelancer is real." },
+  { icon: "🚀", title: "Gamified Growth", desc: "Earn XP, unlock badges like Challenge Master, and climb leaderboards. Your reputation grows with every completed project." },
+  { icon: "🤝", title: "Three-Role Ecosystem", desc: "Three distinct roles power the platform: Freelancers who deliver work, Moderators who keep quality high, and Admins who govern the whole system." },
 ];
 
 const BADGE_TIERS = [
-  { key: "pathfinder", icon: "🎯", name: "Pathfinder", xp: 100, color: "#0f6e56", bg: "#e0faf7", border: "#6bd8cb", desc: "Awarded for starting your SPM journey" },
-  { key: "explorer", icon: "🧭", name: "Explorer", xp: 250, color: "#264778", bg: "#dbe8ff", border: "#a9c7ff", desc: "Awarded for exploring all platform modules" },
-  { key: "certified", icon: "⚡", name: "Certified", xp: 500, color: "#b87400", bg: "#fff3d0", border: "#f0c060", desc: "Awarded when you pass your first skill test" },
-  { key: "pioneer", icon: "🏆", name: "Pioneer", xp: 1000, color: "#7c1fa8", bg: "#f3e0ff", border: "#c07fd0", desc: "Awarded to early platform adopters" },
+  // Challenge Master — first badge, awarded after completing 3+ challenges
+  // Design: dark teal hexagon with yellow lightning bolt (see attached badge image)
+  { key: "challenge_master", icon: "⚡", name: "Challenge Master", xp: 200, color: "#0f5e47", bg: "#e0faf7", border: "#6bd8cb", code: "CHALLENGE_MASTER", desc: "Awarded after completing 3 or more challenges." },
+  { key: "pathfinder", icon: "🎯", name: "Pathfinder", xp: 100, color: "#0f6e56", bg: "#e0faf7", border: "#6bd8cb", code: "PATHFINDER", desc: "Awarded for starting your SPM journey" },
+  { key: "explorer", icon: "🧭", name: "Explorer", xp: 250, color: "#264778", bg: "#dbe8ff", border: "#a9c7ff", code: "EXPLORER", desc: "Awarded for exploring all platform modules" },
+  { key: "pioneer", icon: "🏆", name: "Pioneer", xp: 1000, color: "#7c1fa8", bg: "#f3e0ff", border: "#c07fd0", code: "PIONEER", desc: "Awarded to early platform adopters" },
 ];
 
 /* ═══════════════════════════════════════════════════════════════
@@ -401,8 +403,8 @@ export default function SPMOnboarding() {
   const fetchNotifications = useCallback(async () => {
     try {
       const [nr, cr] = await Promise.all([
-        fetch(`${API_BASE}/api/notifications/u001`, { headers: { "x-user-id": "u001" } }),  // Changed from "1" to "u001"
-        fetch(`${API_BASE}/api/notifications/u001/unread-count`, { headers: { "x-user-id": "u001" } }),
+        fetch(`${API_BASE}/api/notifications/1`, { headers: { "x-user-id": "1" } }),  
+        fetch(`${API_BASE}/api/notifications/1/unread-count`, { headers: { "x-user-id": "1" } }),
       ]);
       if (nr.ok) { const d = await nr.json(); if (d.success) setNotifications(d.notifications || []); }
       if (cr.ok) { const d = await cr.json(); if (d.success) setUnreadCount(d.unread_count || 0); }
@@ -532,10 +534,11 @@ export default function SPMOnboarding() {
       });
     }
 
-    // Step 4 → 5: Modules explored — award explorer XP + badge
+    // Step 4 → 5: Modules explored — award challenge_master badge + XP
     if (step === 4) {
-      setEarnedBadge("explorer");
-      setXp(x => x + 250);
+      // Award the Challenge Master badge — first badge in the system (+200 XP)
+      setEarnedBadge("challenge_master");
+      setXp(x => x + 200);
 
       if (backendOK) {
         apiPost("/api/gamification/onboarding/complete-step", {
@@ -628,7 +631,8 @@ export default function SPMOnboarding() {
               <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 10, fontWeight: 900, color: "#fff", textTransform: "uppercase", letterSpacing: ".09em" }}>Platform Tour</div>
               <div style={{ fontSize: 8, color: T.tertiaryFixedDim, letterSpacing: ".16em", textTransform: "uppercase", marginTop: 1 }}>{slide + 1} of {TOUR_SLIDES.length}</div>
             </div>
-            <button onClick={() => { if (slide < TOUR_SLIDES.length - 1) setSlide(i => i + 1); else next(); }} style={{ width: 24, height: 24, borderRadius: "50%", background: T.tertiaryFixed, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            {/* Skip Step 1 entirely — goes straight to Step 2 (About) */}
+            <button onClick={next} title="Skip tour intro" style={{ width: 24, height: 24, borderRadius: "50%", background: T.tertiaryFixed, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <svg width="9" height="9" viewBox="0 0 9 9" fill="none"><path d="M2 4.5h5M4.5 2.5L6.5 4.5 4.5 6.5" stroke={T.primary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </button>
           </div>
@@ -765,6 +769,7 @@ export default function SPMOnboarding() {
           </div>
           <div style={{ padding: "8px 12px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: `1px solid ${T.outlineVar}` }}>
             <button onClick={() => setSlide(i => Math.max(0, i - 1))} style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, textTransform: "uppercase", letterSpacing: ".1em", background: "none", border: "none", cursor: "pointer", opacity: slide === 0 ? .3 : 1 }}>← Prev</button>
+            {/* TODO: Replace href with actual skip/dashboard route e.g. "/dashboard?onboarding=skipped" */}
             <button onClick={skip} style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, textTransform: "uppercase", letterSpacing: ".1em", background: "none", border: `1px solid ${T.outlineVar}`, borderRadius: 5, padding: "3px 9px", cursor: "pointer" }}>Skip</button>
             <button onClick={() => { if (slide < TOUR_SLIDES.length - 1) setSlide(i => i + 1); else next(); }} style={{ fontFamily: "Manrope,sans-serif", fontSize: 8.5, fontWeight: 800, color: "#fff", background: T.primary, border: "none", borderRadius: 6, padding: "5px 13px", cursor: "pointer", textTransform: "uppercase", letterSpacing: ".1em" }}>
               {slide === TOUR_SLIDES.length - 1 ? "Begin →" : "Next →"}
@@ -785,8 +790,9 @@ export default function SPMOnboarding() {
 
     const CARDS = [
       {
-        icon: "🇵🇰", title: "Pakistan's National Platform",
-        desc: "Built to empower every Pakistani freelancer — from Karachi to Gilgit — with verified skills and fair opportunities.",
+        icon: "🎓", title: "FAST NUCES Islamabad",
+        // SPM Capstone Project — built by a full class of CS students
+        desc: "Built by a full class of CS students at FAST-NUCES Islamabad as our Software Project Management capstone — real code, real teamwork, real deadlines.",
         accent: "#001736", accentLight: "#dbe8ff", border: "#a9c7ff",
         illu: (hov) => (
           <svg width="100%" height="70" viewBox="0 0 200 70" style={{ overflow: "visible" }}>
@@ -796,7 +802,7 @@ export default function SPMOnboarding() {
                 <stop offset="100%" stopColor="#264778" />
               </linearGradient>
             </defs>
-            {/* Map dots for Pakistan provinces */}
+            {/* Graduation cap + team dots representing FAST NUCES class */}
             {[[40, 35, "#89f5e7"], [70, 20, "#a9c7ff"], [100, 30, "#fcd34d"], [130, 25, "#f9a8d4"], [160, 35, "#86efac"], [55, 50, "#fdba74"], [115, 48, "#c4b5fd"], [85, 55, "#89f5e7"]].map(([x, y, c], i) => (
               <g key={i}>
                 <circle cx={x} cy={y} r={hov ? 5 : 3.5} fill={c} opacity={hov ? 1 : .7}
@@ -805,19 +811,19 @@ export default function SPMOnboarding() {
                   style={{ animation: `illuFloat ${1.5 + i * .2}s ease-in-out infinite` }} />}
               </g>
             ))}
-            {/* Connection lines when hovered */}
             {hov && [[40, 35, 100, 30], [70, 20, 100, 30], [130, 25, 100, 30], [160, 35, 100, 30], [55, 50, 100, 30], [115, 48, 100, 30]].map(([x1, y1, x2, y2], i) => (
               <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#a9c7ff" strokeWidth=".8" opacity=".4"
                 strokeDasharray="3 2" style={{ animation: `illuFloat ${1.8 + i * .15}s ease-in-out infinite` }} />
             ))}
             <circle cx="100" cy="30" r={hov ? 9 : 6} fill="url(#pkGrad)" stroke="#89f5e7" strokeWidth={hov ? 1.8 : 1.2} style={{ transition: "all .3s" }} />
-            <text x="100" y="34" textAnchor="middle" fontSize={hov ? 10 : 8} style={{ transition: "font-size .3s" }}>🇵🇰</text>
+            <text x="100" y="34" textAnchor="middle" fontSize={hov ? 10 : 8} style={{ transition: "font-size .3s" }}>🎓</text>
           </svg>
         ),
       },
       {
         icon: "🔐", title: "Verified & Trusted",
-        desc: "CNIC-linked identity verification, proctored skill tests, and escrow payments ensure every transaction is safe.",
+        // CNIC-linked identity + escrow ensures every user and transaction is legit
+        desc: "CNIC-linked identity verification, proctored skill tests, and escrow payments ensure every transaction is safe and every freelancer is real.",
         accent: "#0f6e56", accentLight: "#e0faf7", border: "#6bd8cb",
         illu: (hov) => (
           <svg width="100%" height="70" viewBox="0 0 200 70" style={{ overflow: "visible" }}>
@@ -847,7 +853,8 @@ export default function SPMOnboarding() {
       },
       {
         icon: "🚀", title: "Gamified Growth",
-        desc: "Level up, earn badges, and climb leaderboards. Your reputation grows with every completed project.",
+        // XP system, badges (starting with Challenge Master), and leaderboards
+        desc: "Earn XP, unlock badges like Challenge Master (+200 XP), and climb leaderboards. Your reputation grows with every completed project on SPM Nexus.",
         accent: "#7c1fa8", accentLight: "#f3e0ff", border: "#c07fd0",
         illu: (hov) => (
           <svg width="100%" height="70" viewBox="0 0 200 70" style={{ overflow: "visible" }}>
@@ -877,8 +884,9 @@ export default function SPMOnboarding() {
         ),
       },
       {
-        icon: "🤝", title: "Community First",
-        desc: "Social impact projects, volunteer missions, and a thriving network of 50,000+ professionals.",
+        icon: "🤝", title: "Three-Role Ecosystem",
+        // Three roles: Freelancer, Moderator, Admin — each with distinct powers
+        desc: "Three roles power the platform: Freelancers who deliver work, Moderators who keep quality high, and Admins who govern the entire system.",
         accent: "#b87400", accentLight: "#fff3d0", border: "#f0c060",
         illu: (hov) => (
           <svg width="100%" height="70" viewBox="0 0 200 70" style={{ overflow: "visible" }}>
@@ -907,15 +915,17 @@ export default function SPMOnboarding() {
       },
     ];
 
+    // Stats reflect the SPM Nexus platform scope and class team size
     const STATS = [
-      { v: "50K+", l: "Freelancers", icon: "👥", color: "#89f5e7" },
+      { v: "3", l: "User Roles", icon: "👥", color: "#89f5e7" },
       { v: "12", l: "Modules", icon: "🧩", color: "#a9c7ff" },
       { v: "100%", l: "Escrow Safe", icon: "🔒", color: "#6bd8cb" },
-      { v: "4.9★", l: "Rating", icon: "⭐", color: "#fcd34d" },
+      { v: "FAST", l: "NUCES ISB", icon: "🎓", color: "#fcd34d" },
     ];
 
     return (
-      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "22px 6% 22px", background: T.surface }}>
+      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "22px 6% 22px", background: T.surface, display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 680 }}>
         <style>{`
           @keyframes statPop { from{transform:scale(.6);opacity:0} to{transform:scale(1);opacity:1} }
           @keyframes cardSlide { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
@@ -934,7 +944,7 @@ export default function SPMOnboarding() {
             </span>
           </div>
           <div style={{ fontSize: 11, color: T.onSurfaceVar, lineHeight: 1.7, maxWidth: 520 }}>
-            SPM Nexus is Pakistan's national freelance and skill verification system — a government-aligned platform connecting <strong style={{ color: T.primary }}>verified talent</strong> with real opportunities across every province.
+            SPM Nexus is a full-stack freelance platform built by <strong style={{ color: T.primary }}>FAST-NUCES Islamabad students</strong> as a Software Project Management capstone. Three roles drive the system: <strong style={{ color: T.primary }}>Freelancers</strong> who deliver work, <strong style={{ color: "#0f6e56" }}>Moderators</strong> who ensure quality, and <strong style={{ color: "#7c1fa8" }}>Admins</strong> who govern the platform.
           </div>
         </div>
 
@@ -1004,6 +1014,7 @@ export default function SPMOnboarding() {
             </div>
           ))}
         </div>
+        </div>
       </div>
     );
   };
@@ -1050,12 +1061,13 @@ export default function SPMOnboarding() {
         ),
       },
       {
-        r: "Client", icon: "🏢",
-        desc: "Post projects and hire Pakistan's best verified talent.",
-        badge: "Employer Badge",
+        r: "Moderator", icon: "🛡️",
+        // Moderators review content, resolve disputes, and ensure platform quality
+        desc: "Review submissions, resolve disputes, and keep the platform standards high.",
+        badge: "Moderator Badge",
         accent: "#264778", accentLight: "#dbe8ff", border: "#a9c7ff",
         xpColor: "#264778", xpBg: "#dbe8ff",
-        perks: ["Post unlimited projects", "Access verified freelancers", "Milestone-based escrow"],
+        perks: ["Review project submissions", "Mediate freelancer disputes", "Enforce platform quality"],
         illu: (isHov) => (
           <svg viewBox="0 0 160 100" width="100%" height="90" style={{ overflow: "visible" }}>
             <defs>
@@ -1064,20 +1076,17 @@ export default function SPMOnboarding() {
                 <stop offset="100%" stopColor="#264778" />
               </linearGradient>
             </defs>
-            {/* Building */}
+            {/* Moderator shield + review checkmarks */}
             <rect x="55" y="20" width="50" height="64" rx="4" fill={isHov ? "url(#clGrad)" : "none"} stroke="#a9c7ff" strokeWidth="1.5"
               style={{ transition: "fill .3s" }} />
-            {/* Windows */}
             {[[63, 28], [80, 28], [97, 28], [63, 42], [80, 42], [97, 42], [63, 56], [80, 56], [97, 56]].map(([wx, wy], i) => (
               <rect key={i} x={wx} y={wy} width="9" height="7" rx="1.5"
                 fill={isHov ? ["#89f5e7", "#fcd34d", "#f9a8d4", "#86efac", "#a9c7ff", "#fdba74", "#c4b5fd", "#7dd3fc", "#89f5e7"][i] : "rgba(255,255,255,.15)"}
                 opacity={isHov ? 1 : .6} style={{ transition: `fill .25s ${i * .04}s` }} />
             ))}
-            {/* Door */}
             <rect x="73" y="70" width="14" height="14" rx="2" fill={isHov ? "#001736" : "rgba(255,255,255,.1)"} stroke="#a9c7ff" strokeWidth="1"
               style={{ transition: "fill .3s" }} />
-            {/* Floating elements */}
-            {isHov && [["📋", 30, 35], ["✅", 130, 30], ["💰", 135, 65], ["🤝", 25, 65]].map(([em, x, y], i) => (
+            {isHov && [["⚖️", 30, 35], ["✅", 130, 30], ["🔍", 135, 65], ["📋", 25, 65]].map(([em, x, y], i) => (
               <text key={i} x={x} y={y} textAnchor="middle" fontSize="12"
                 style={{ animation: `illuFloat ${1.6 + i * .25}s ${i * .15}s ease-in-out infinite` }}>{em}</text>
             ))}
@@ -1123,7 +1132,8 @@ export default function SPMOnboarding() {
     ];
 
     return (
-      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "18px 22px 10px", background: T.surface }}>
+      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "18px 22px 10px", background: T.surface, display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 680 }}>
         <style>{`
           @keyframes roleIn { from{opacity:0;transform:translateY(12px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
           @keyframes perkIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
@@ -1135,7 +1145,16 @@ export default function SPMOnboarding() {
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
             <div style={{ width: 3, height: 18, background: "#f0c060", borderRadius: 2 }} />
             <span style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, letterSpacing: ".18em", textTransform: "uppercase" }}>Step 3 of 6</span>
-            <span style={{ background: "#fff8e1", color: "#b87400", fontSize: 7.5, fontWeight: 700, borderRadius: 4, padding: "1.5px 7px", border: "1px solid #f0c060" }}>+100 XP</span>
+            {/* +100 XP reward pill — light blue card, gold value, matches the XP badge design */}
+            <div style={{
+              display: "inline-flex", flexDirection: "column", alignItems: "center",
+              background: "#deeaf8", borderRadius: 8,
+              padding: "3px 9px 4px", lineHeight: 1, gap: 1,
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+            }}>
+              <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 800, color: "#b87c00" }}>+100</span>
+              <span style={{ fontSize: 7, fontWeight: 700, color: "#7a9dbf", textTransform: "uppercase", letterSpacing: ".08em" }}>XP</span>
+            </div>
           </div>
           <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 22, fontWeight: 900, color: T.primary, lineHeight: 1.18, marginBottom: 4 }}>
             Choose your <span style={{ color: T.tertiaryFixedDim }}>role</span>
@@ -1226,6 +1245,7 @@ export default function SPMOnboarding() {
             <span style={{ fontSize: 7, fontWeight: 700, color: "#b87400", letterSpacing: ".1em" }}>XP</span>
           </div>
         </div>
+        </div>
       </div>
     );
   };
@@ -1266,66 +1286,109 @@ export default function SPMOnboarding() {
 
     return (
       <div key={paneKey} className="pane" style={{ flex: 1, display: "flex", flexDirection: "column", padding: "18px 22px 8px", overflow: "hidden" }}>
+        <style>{`
+          @keyframes drawerIn {
+            from { opacity: 0; transform: translateY(-6px) scaleY(0.85); }
+            to   { opacity: 1; transform: translateY(0)  scaleY(1); }
+          }
+        `}</style>
         <div style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, letterSpacing: ".16em", textTransform: "uppercase", marginBottom: 4, display: "flex", alignItems: "center", gap: 5 }}>
           Step 4 of 6 <span style={{ background: T.secondaryContainer, color: T.primaryContainer, fontSize: 7.5, fontWeight: 700, borderRadius: 4, padding: "1.5px 6px" }}>12 Modules</span>
         </div>
         <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 19, fontWeight: 900, color: T.primary, marginBottom: 3 }}>Platform <span style={{ color: "#0f6e56" }}>modules</span></div>
-        <div style={{ fontSize: 11, color: T.onSurfaceVar, marginBottom: 10 }}>Hover any module to learn what it does.</div>
+        <div style={{ fontSize: 11, color: T.onSurfaceVar, marginBottom: 10 }}>Hover any module to peek inside.</div>
 
-        {/* Expanded detail card for hovered module */}
-        <div style={{
-          flexShrink: 0, height: hovered !== null ? 54 : 0, overflow: "hidden",
-          transition: "height .3s cubic-bezier(.34,1.56,.64,1)",
-          marginBottom: hovered !== null ? 8 : 0,
-        }}>
-          {hovered !== null && (() => {
-            const m = MODULES[hovered];
-            const c = MODULE_COLORS[hovered];
+        {/* Module grid — description drawer opens inline between rows */}
+        <div style={{ flex: 1, overflowY: "auto", paddingRight: 2 }}>
+          {/* Render in pairs of 2 per row so we can inject the drawer between rows */}
+          {Array.from({ length: Math.ceil(MODULES.length / 2) }, (_, rowIdx) => {
+            const left  = MODULES[rowIdx * 2];
+            const right = MODULES[rowIdx * 2 + 1];
+            const leftIdx  = rowIdx * 2;
+            const rightIdx = rowIdx * 2 + 1;
+            // Is any card in this row hovered?
+            const activeInRow = (hovered === leftIdx || hovered === rightIdx) ? hovered : null;
+            const ac = activeInRow !== null ? MODULE_COLORS[activeInRow] : null;
+            const am = activeInRow !== null ? MODULES[activeInRow]       : null;
+
             return (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, background: c.bg, border: `1.5px solid ${c.border}`, borderRadius: 10, padding: "9px 13px" }}>
-                <div style={{ width: 36, height: 36, borderRadius: 8, background: c.icon_bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{m.icon}</div>
-                <div>
-                  <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 11, fontWeight: 800, color: c.accent, marginBottom: 2 }}>Module {String(m.n).padStart(2, "0")} — {m.name}</div>
-                  <div style={{ fontSize: 9.5, color: T.onSurfaceVar, lineHeight: 1.5 }}>{MODULE_DESCS[hovered]}</div>
+              <div key={rowIdx} style={{ marginBottom: 5 }}>
+                {/* The two cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+                  {[left, right].map((m, side) => {
+                    if (!m) return <div key={side} />;
+                    const idx    = rowIdx * 2 + side;
+                    const c      = MODULE_COLORS[idx % MODULE_COLORS.length];
+                    const isHov  = hovered === idx;
+                    return (
+                      <div
+                        key={m.n}
+                        onMouseEnter={() => setHovered(idx)}
+                        onMouseLeave={() => setHovered(null)}
+                        style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          border: `1.5px solid ${isHov ? c.border : T.outlineVar}`,
+                          borderRadius: 9, padding: "7px 9px", cursor: "default",
+                          background: isHov ? c.bg : T.surface,
+                          transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
+                          transform: isHov ? "translateY(-1px)" : "none",
+                          boxShadow: isHov ? `0 4px 14px ${c.border}55` : "none",
+                        }}
+                      >
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 7,
+                          background: isHov ? c.icon_bg : T.surfaceContainer,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 15, flexShrink: 0, transition: "background .18s",
+                        }}>{m.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
+                            <span style={{ fontSize: 7, fontWeight: 800, color: isHov ? c.accent : T.outline, background: isHov ? c.icon_bg : T.surfaceHigh, borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
+                              {String(m.n).padStart(2, "0")}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: isHov ? c.accent : T.onSurfaceVar, lineHeight: 1.3, display: "block" }}>{m.name}</span>
+                        </div>
+                        {/* little arrow indicator when hovered */}
+                        {isHov && (
+                          <div style={{ width: 14, height: 14, borderRadius: "50%", background: c.icon_bg, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 8, color: c.accent }}>▾</div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            );
-          })()}
-        </div>
 
-        <div style={{ flex: 1, overflowY: "auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, paddingRight: 2 }}>
-          {MODULES.map((m, idx) => {
-            const c = MODULE_COLORS[idx % MODULE_COLORS.length];
-            const isHov = hovered === idx;
-            return (
-              <div
-                key={m.n}
-                onMouseEnter={() => setHovered(idx)}
-                onMouseLeave={() => setHovered(null)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  border: `1.5px solid ${isHov ? c.border : T.outlineVar}`,
-                  borderRadius: 9, padding: "7px 9px", cursor: "default",
-                  background: isHov ? c.bg : T.surface,
-                  transition: "all .18s cubic-bezier(.34,1.56,.64,1)",
-                  transform: isHov ? "translateY(-1px)" : "none",
-                  boxShadow: isHov ? `0 4px 14px ${c.border}55` : "none",
-                }}
-              >
-                <div style={{
-                  width: 28, height: 28, borderRadius: 7,
-                  background: isHov ? c.icon_bg : T.surfaceContainer,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 15, flexShrink: 0, transition: "background .18s",
-                }}>{m.icon}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                    <span style={{ fontSize: 7, fontWeight: 800, color: isHov ? c.accent : T.outline, background: isHov ? c.icon_bg : T.surfaceHigh, borderRadius: 3, padding: "1px 4px", flexShrink: 0 }}>
-                      {String(m.n).padStart(2, "0")}
-                    </span>
+                {/* Inline drawer — slides open below the row when either card is hovered */}
+                {activeInRow !== null && am && ac && (
+                  <div
+                    onMouseEnter={() => setHovered(activeInRow)}
+                    onMouseLeave={() => setHovered(null)}
+                    style={{
+                      marginTop: 4,
+                      background: ac.bg,
+                      border: `1.5px solid ${ac.border}`,
+                      borderRadius: 10,
+                      padding: "10px 13px",
+                      display: "flex", alignItems: "flex-start", gap: 10,
+                      animation: "drawerIn .22s cubic-bezier(.34,1.56,.64,1) both",
+                      transformOrigin: "top center",
+                    }}
+                  >
+                    {/* Large icon */}
+                    <div style={{ width: 38, height: 38, borderRadius: 9, background: ac.icon_bg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0, boxShadow: `0 2px 8px ${ac.border}44` }}>{am.icon}</div>
+                    <div style={{ flex: 1 }}>
+                      {/* Module label + number */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                        <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 11, fontWeight: 900, color: ac.accent }}>{am.name}</span>
+                        <span style={{ fontSize: 7.5, fontWeight: 700, color: ac.accent, background: ac.icon_bg, borderRadius: 4, padding: "1px 5px", opacity: .8 }}>MOD {String(am.n).padStart(2,"0")}</span>
+                      </div>
+                      {/* Description */}
+                      <div style={{ fontSize: 10, color: T.onSurfaceVar, lineHeight: 1.6 }}>{MODULE_DESCS[activeInRow]}</div>
+                    </div>
+                    {/* Close hint */}
+                    <div style={{ fontSize: 8, color: ac.accent, opacity: .5, flexShrink: 0, paddingTop: 2 }}>move away to close</div>
                   </div>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: isHov ? c.accent : T.onSurfaceVar, lineHeight: 1.3, display: "block" }}>{m.name}</span>
-                </div>
+                )}
               </div>
             );
           })}
@@ -1339,15 +1402,53 @@ export default function SPMOnboarding() {
     const [reveal, setReveal] = useState(false);
     useEffect(() => { const t = setTimeout(() => setReveal(true), 300); return () => clearTimeout(t); }, []);
     return (
-      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "20px 22px 10px" }}>
+      <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "20px 22px 10px", display: "flex", justifyContent: "center" }}>
+        <div style={{ width: "100%", maxWidth: 560 }}>
         <div style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, letterSpacing: ".16em", textTransform: "uppercase", marginBottom: 14, display: "flex", alignItems: "center", gap: 5 }}>
           Step 5 of 6 <span style={{ background: "#e0faf7", color: "#0f6e56", fontSize: 7.5, fontWeight: 700, borderRadius: 4, padding: "1.5px 6px", border: "1px solid #6bd8cb" }}>Badge Unlocked!</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "20px", background: `linear-gradient(135deg, ${badge.bg} 0%, #f9f9ff 100%)`, border: `2px solid ${badge.border}`, borderRadius: 14, marginBottom: 14, transform: reveal ? "translateY(0) scale(1)" : "translateY(12px) scale(.9)", opacity: reveal ? 1 : 0, transition: "all .55s cubic-bezier(.34,1.56,.64,1)" }}>
-          <div style={{ width: 74, height: 74, borderRadius: "50%", background: badge.bg, border: `3px solid ${badge.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, marginBottom: 12, boxShadow: `0 0 0 7px ${badge.bg}, 0 0 0 9px ${badge.border}38`, animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" }}>{badge.icon}</div>
+
+          {/* Challenge Master Badge — dark teal hexagon with yellow lightning bolt, matching badge design */}
+          {badge.key === "challenge_master" ? (
+            <div style={{ marginBottom: 12, animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" }}>
+              <svg width="84" height="84" viewBox="0 0 84 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="hexGrad" x1="42" y1="8" x2="42" y2="76" gradientUnits="userSpaceOnUse">
+                    <stop offset="0%" stopColor="#1a6e57" />
+                    <stop offset="100%" stopColor="#0a3d2e" />
+                  </linearGradient>
+                  <filter id="hexGlow">
+                    <feGaussianBlur stdDeviation="2.5" result="blur" />
+                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+                  </filter>
+                </defs>
+                {/* Outer glow ring */}
+                <polygon points="42,4 74,22 74,62 42,80 10,62 10,22" fill="none" stroke="#6bd8cb" strokeWidth="1.5" opacity="0.35" />
+                {/* Hexagon body */}
+                <polygon points="42,10 70,26 70,58 42,74 14,58 14,26" fill="url(#hexGrad)" stroke="#4db89e" strokeWidth="1.8" filter="url(#hexGlow)" />
+                {/* Inner subtle highlight ring */}
+                <polygon points="42,16 65,29 65,55 42,68 19,55 19,29" fill="none" stroke="rgba(107,216,203,0.2)" strokeWidth="1" />
+                {/* Lightning bolt — yellow, centered */}
+                <path d="M46 22L35 43H42.5L38 62L51 39H43L46 22Z" fill="#f0c040" stroke="#e8a800" strokeWidth="0.8" strokeLinejoin="round" />
+              </svg>
+            </div>
+          ) : (
+            <div style={{ width: 74, height: 74, borderRadius: "50%", background: badge.bg, border: `3px solid ${badge.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, marginBottom: 12, boxShadow: `0 0 0 7px ${badge.bg}, 0 0 0 9px ${badge.border}38`, animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" }}>{badge.icon}</div>
+          )}
+
           <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 8, fontWeight: 700, color: badge.color, textTransform: "uppercase", letterSpacing: ".2em", marginBottom: 5 }}>Badge Earned</div>
           <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 20, fontWeight: 900, color: T.primary, marginBottom: 5 }}>{badge.name}</div>
           <div style={{ fontSize: 10.5, color: T.onSurfaceVar, lineHeight: 1.65, maxWidth: 270, marginBottom: 11 }}>{badge.desc}</div>
+
+          {/* Badge code pill — matches the "Code: CHALLENGE_MASTER" shown in the badge design */}
+          {badge.code && (
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.surfaceContainer, border: `1px solid ${badge.border}`, borderRadius: 5, padding: "3px 10px", marginBottom: 10 }}>
+              <span style={{ fontSize: 8.5, fontWeight: 500, color: T.secondary }}>Code:</span>
+              <span style={{ fontFamily: "monospace", fontSize: 9, fontWeight: 700, color: badge.color, letterSpacing: ".06em" }}>{badge.code}</span>
+            </div>
+          )}
+
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: badge.bg, border: `1px solid ${badge.border}`, borderRadius: 18, padding: "4px 13px" }}>
             <span style={{ fontSize: 11 }}>⚡</span>
             <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 900, color: badge.color }}>+{badge.xp} XP</span>
@@ -1378,6 +1479,7 @@ export default function SPMOnboarding() {
           </div>
           <div style={{ fontSize: 7.5, color: T.outline, marginTop: 3 }}>Next badge at 500 XP · Keep exploring the platform!</div>
         </div>
+        </div>
       </div>
     );
   };
@@ -1400,7 +1502,23 @@ export default function SPMOnboarding() {
           </div>
           <div style={{ position: "absolute", inset: 0, backdropFilter: "blur(13px)", background: "rgba(6,15,28,.82)" }} />
         </div>
-        <div style={{ position: "relative", zIndex: 1, textAlign: "center", padding: "0 28px", transform: show ? "translateY(0)" : "translateY(22px)", opacity: show ? 1 : 0, transition: "all .65s cubic-bezier(.34,1.56,.64,1)" }}>
+        <div style={{
+          position: "relative", zIndex: 1,
+          textAlign: "center",
+          padding: "28px 32px 24px",
+          /* Solid card — dark glass, no bleed-through from any background screen */
+          background: "rgba(4, 12, 28, 0.94)",
+          backdropFilter: "blur(20px) saturate(1.2)",
+          WebkitBackdropFilter: "blur(20px) saturate(1.2)",
+          border: "1px solid rgba(137,245,231,0.12)",
+          borderRadius: 18,
+          boxShadow: "0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(137,245,231,0.06)",
+          maxWidth: 420,
+          width: "100%",
+          transform: show ? "translateY(0)" : "translateY(22px)",
+          opacity: show ? 1 : 0,
+          transition: "all .65s cubic-bezier(.34,1.56,.64,1)",
+        }}>
           <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(137,245,231,.1)", border: `2px solid ${T.tertiaryFixed}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", animation: show ? "glow 2.2s ease-in-out infinite alternate" : "none" }}>
             <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><path d="M7 16L13 22L25 10" stroke={T.tertiaryFixed} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
           </div>
@@ -1415,13 +1533,12 @@ export default function SPMOnboarding() {
               </div>
             ))}
           </div>
-          <div style={{ background: "rgba(0,23,54,.72)", border: "1px solid rgba(137,245,231,.1)", borderRadius: 11, padding: "13px 18px", textAlign: "left", maxWidth: 340, margin: "0 auto 20px" }}>
+          <div style={{ background: "rgba(0,23,54,.55)", border: "1px solid rgba(137,245,231,0.1)", borderRadius: 11, padding: "13px 18px", textAlign: "left", marginBottom: 20 }}>
             {[
               `Role selected: ${role || "Not set"}`,
               `12 platform modules explored`,
               badge ? `${badge.name} Badge earned (${badge.xp} XP)` : "Pathfinder Badge earned",
               "Gamification dashboard unlocked",
-              backendOK ? "XP & notifications synced to backend" : "Offline mode — connect backend when ready",
             ].map((f, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4.5px 0", borderBottom: i < 4 ? "1px solid rgba(255,255,255,.055)" : "none" }}>
                 <div style={{ width: 4.5, height: 4.5, borderRadius: "50%", background: T.tertiaryFixedDim, flexShrink: 0 }} />
@@ -1429,6 +1546,7 @@ export default function SPMOnboarding() {
               </div>
             ))}
           </div>
+          {/* TODO: Replace onClick with router navigation e.g. navigate("/dashboard") or window.location.href = "/dashboard" */}
           <button onClick={() => alert("Navigate to /dashboard")} style={{ fontFamily: "Manrope,sans-serif", fontSize: 10.5, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".12em", color: T.primary, background: T.tertiaryFixed, border: "none", borderRadius: 10, padding: "11px 30px", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 7, boxShadow: `0 8px 22px rgba(137,245,231,.22)` }}>
             Explore Dashboard ↗
           </button>
@@ -1459,8 +1577,20 @@ export default function SPMOnboarding() {
         a { text-decoration:none; }
       `}</style>
 
-      {/* ── Nexus top navbar ── */}
-      <NexusNavbar xp={xp} backendOK={backendOK} unreadCount={unreadCount} onBellClick={() => setShowPanel(p => !p)} />
+      {/* ── Nexus top navbar — wrapped in overlay during onboarding ── */}
+      <div style={{ position: "relative" }}>
+        <NexusNavbar xp={xp} backendOK={backendOK} unreadCount={unreadCount} onBellClick={() => setShowPanel(p => !p)} />
+        {/* Dark blackish overlay over navbar — blocks interaction during onboarding */}
+        <div style={{
+          position: "absolute", inset: 0,
+          background: "rgba(4,8,18,0.72)",
+          backdropFilter: "blur(3px) saturate(0.4)",
+          WebkitBackdropFilter: "blur(3px) saturate(0.4)",
+          zIndex: 60,
+          pointerEvents: "all",
+          cursor: "not-allowed",
+        }} />
+      </div>
 
       {/* ── Notification panel ── */}
       {showPanel && (
