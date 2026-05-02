@@ -13,8 +13,14 @@ const db      = require("../db/pool");
 const { requireUserId, requireAdmin } = require("../middleware/auth");
 const { updateBadgeConfig } = require("../services/badgeService");
 
-// All admin config routes require admin role
-router.use(requireUserId, requireAdmin);
+// GET requests — require user ID only (viewing is public)
+// POST/PUT/PATCH/DELETE — require admin role
+router.use((req, res, next) => {
+    if (req.method === "GET") {
+        return requireUserId(req, res, next);
+    }
+    return requireUserId(req, res, () => requireAdmin(req, res, next));
+});
 
 // ============================================================
 // ✅ WBS 2.5.1 — Point Value Configuration
@@ -78,24 +84,26 @@ router.get("/level-thresholds", async (_req, res) => {
 });
 
 router.put("/level-thresholds", async (req, res) => {
-    // Body: { level_number: 2, min_points: 500, title: "Intermediate" }
-    const { level_number, min_points, title } = req.body;
-    if (!level_number || min_points === undefined) {
-        return res.status(400).json({ success: false, message: "level_number and min_points required" });
-    }
-    try {
-        const result = await db.query(
-            `INSERT INTO gamification_level_definitions (level_number, min_points, title)
-             VALUES ($1, $2, $3)
-             ON CONFLICT (level_number)
-             DO UPDATE SET min_points = $2, title = COALESCE($3, gamification_level_definitions.title)
-             RETURNING *`,
-            [level_number, min_points, title || null]
-        );
-        res.status(200).json({ success: true, data: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    const { level_number, min_points, max_points, title } = req.body;
+if (!level_number || min_points === undefined) {
+    return res.status(400).json({ success: false, message: "level_number and min_points required" });
+}
+try {
+    const result = await db.query(
+        `INSERT INTO gamification_level_definitions (level_number, min_points, max_points, title)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (level_number)
+         DO UPDATE SET
+             min_points = $2,
+             max_points = $3,
+             title = COALESCE($4, gamification_level_definitions.title)
+         RETURNING *`,
+        [level_number, min_points, max_points ?? null, title || null]
+    );
+    res.status(200).json({ success: true, data: result.rows[0] });
+} catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+}
 });
 
 // ============================================================
@@ -150,16 +158,15 @@ router.delete("/badges/:badgeCode", async (req, res) => {
     try {
         const badgeCode = req.params.badgeCode.toUpperCase();
         const result = await db.query(
-            `UPDATE gamification_badges 
-             SET is_active = FALSE 
+            `DELETE FROM gamification_badges 
              WHERE badge_code = $1
-             RETURNING badge_code, name, is_active`,
+             RETURNING badge_code, name`,
             [badgeCode]
         );
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, message: "Badge not found" });
         }
-        res.status(200).json({ success: true, data: result.rows[0] });
+        res.status(200).json({ success: true, message: `Badge ${badgeCode} deleted permanently` });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }
@@ -232,11 +239,16 @@ router.put("/challenges/:id", async (req, res) => {
 router.delete("/challenges/:id", async (req, res) => {
     const id = parseInt(req.params.id);
     try {
-        await db.query(
-            `UPDATE gamification_challenges SET is_active = FALSE WHERE id = $1`,
+        const result = await db.query(
+            `DELETE FROM gamification_challenges 
+             WHERE id = $1
+             RETURNING id, title`,
             [id]
         );
-        res.status(200).json({ success: true, message: "Challenge deactivated" });
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "Challenge not found" });
+        }
+        res.status(200).json({ success: true, message: `Challenge deleted permanently` });
     } catch (err) {
         res.status(400).json({ success: false, message: err.message });
     }

@@ -394,17 +394,17 @@ function Navbar({ unreadCount, onBellClick }) {
 
       {/* Nav links */}
       <nav style={{ display: "flex", gap: 32 }}>
-        {["Overview", "Leaderboard", "Achievements", "Insights"].map((item, i) => (
-          <a key={item} href="#" onClick={e => {
-            e.preventDefault();
-            if (item === "Leaderboard") window.__navigate("leaderboard");
-            if (item === "Achievements") window.__navigate("achievements");
-          }} style={{
+       {["Overview", "Leaderboard", "Achievements", "Insights"].map((item, i) => (
+      <a key={item} href="#" onClick={e => {
+        e.preventDefault();
+        if (item === "Leaderboard")  window.__navigate("leaderboard");
+        if (item === "Achievements") window.__navigate("achievements");
+      }} style={{
             fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11,
             letterSpacing: "0.08em", textTransform: "uppercase",
-            color: i === 0 ? C.textOnDark : C.navMuted,
+            color: item === "Leaderboard" ? C.textOnDark : C.navMuted,
             textDecoration: "none",
-            borderBottom: i === 0 ? `2px solid ${C.teal}` : "none",
+            borderBottom: item === "Leaderboard" ? `2px solid ${C.teal}` : "none",
             paddingBottom: 2,
           }}>{item}</a>
         ))}
