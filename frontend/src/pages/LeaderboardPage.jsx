@@ -18,75 +18,75 @@ const CURRENT_USER_ID = "1";
 
 const C = {
   // ── Navbar — deep midnight (matches screenshot top bar) ──────
-  navBg:            "#001736",
-  navText:          "#ffffff",
-  navMuted:         "rgba(255,255,255,0.55)",
-  navBorder:        "rgba(255,255,255,0.08)",
-  navHover:         "rgba(255,255,255,0.07)",
+  navBg: "#001736",
+  navText: "#ffffff",
+  navMuted: "rgba(255,255,255,0.55)",
+  navBorder: "rgba(255,255,255,0.08)",
+  navHover: "rgba(255,255,255,0.07)",
 
   // ── Sidebar — white with soft tonal blue (matches screenshot) ─
-  sidebarBg:        "#f0f3ff",      // Soft Tonal Blue background
-  sidebarGrad:      "#f9f9ff",      // gradient end
-  sidebarBorder:    "#e4e8f0",
-  sidebarText:      "#515f74",      // Nexus secondary — readable blue-grey
-  sidebarActiveText:"#001736",      // Deep Midnight for active
-  sidebarActiveBg:  "#ffffff",      // White card for active item
-  sidebarHoverBg:   "#dee8ff",      // Surface high on hover
-  sidebarLabel:     "#747780",      // Muted label
+  sidebarBg: "#f0f3ff",      // Soft Tonal Blue background
+  sidebarGrad: "#f9f9ff",      // gradient end
+  sidebarBorder: "#e4e8f0",
+  sidebarText: "#515f74",      // Nexus secondary — readable blue-grey
+  sidebarActiveText: "#001736",      // Deep Midnight for active
+  sidebarActiveBg: "#ffffff",      // White card for active item
+  sidebarHoverBg: "#dee8ff",      // Surface high on hover
+  sidebarLabel: "#747780",      // Muted label
 
   // ── Page & surfaces ──────────────────────────────────────────
-  pageBg:           "#f9f9ff",      // Nexus surface
-  surfaceCard:      "#ffffff",      // White cards
+  pageBg: "#f9f9ff",      // Nexus surface
+  surfaceCard: "#ffffff",      // White cards
   surfaceContainer: "#e7eeff",      // Surface container
-  surfaceHigh:      "#dee8ff",      // Surface high
-  surfaceLow:       "#f0f3ff",      // Soft Tonal Blue
+  surfaceHigh: "#dee8ff",      // Surface high
+  surfaceLow: "#f0f3ff",      // Soft Tonal Blue
 
   // ── Brand colours ────────────────────────────────────────────
-  primary:          "#001736",      // Deep Midnight
+  primary: "#001736",      // Deep Midnight
   primaryContainer: "#002b5b",
-  obsidian:         "#001b18",      // Obsidian Green — used for badges/podium
-  obsidianMid:      "#00322d",
-  teal:             "#89f5e7",      // Teal Accent
-  tealDim:          "#6bd8cb",
-  tealFaint:        "#2ca397",
-  tealOnLight:      "#007a6e",      // Teal readable on white bg
+  obsidian: "#001b18",      // Obsidian Green — used for badges/podium
+  obsidianMid: "#00322d",
+  teal: "#89f5e7",      // Teal Accent
+  tealDim: "#6bd8cb",
+  tealFaint: "#2ca397",
+  tealOnLight: "#007a6e",      // Teal readable on white bg
 
   // ── Text ─────────────────────────────────────────────────────
-  textPrimary:      "#111c2d",      // On-background
-  textSecondary:    "#43474f",      // On-surface-variant
-  textMuted:        "#747780",      // Outline
-  textOnDark:       "#ffffff",      // White text on dark surfaces
-  textOnTeal:       "#001b18",
+  textPrimary: "#111c2d",      // On-background
+  textSecondary: "#43474f",      // On-surface-variant
+  textMuted: "#747780",      // Outline
+  textOnDark: "#ffffff",      // White text on dark surfaces
+  textOnTeal: "#001b18",
 
   // ── Cards ─────────────────────────────────────────────────────
-  cardBorder:       "#c4c6d0",      // Outline-variant (light)
-  cardBorderLight:  "rgba(196,198,208,0.4)",
-  cardShadow:       "0 1px 4px rgba(0,23,54,0.07), 0 4px 16px rgba(0,23,54,0.04)",
+  cardBorder: "#c4c6d0",      // Outline-variant (light)
+  cardBorderLight: "rgba(196,198,208,0.4)",
+  cardShadow: "0 1px 4px rgba(0,23,54,0.07), 0 4px 16px rgba(0,23,54,0.04)",
 
   // ── Table rows ───────────────────────────────────────────────
-  rowBg:            "#ffffff",
-  rowAlt:           "#f0f3ff",      // Soft tonal blue alt row
-  rowHover:         "#dee8ff",
-  rowActiveBg:      "#001736",      // Current user = deep midnight
-  rowActiveBorder:  "#89f5e7",
+  rowBg: "#ffffff",
+  rowAlt: "#f0f3ff",      // Soft tonal blue alt row
+  rowHover: "#dee8ff",
+  rowActiveBg: "#001736",      // Current user = deep midnight
+  rowActiveBorder: "#89f5e7",
 
   // ── Podium (dark — stands out on light page) ─────────────────
-  podiumBg:         "#001736",
-  podium2:          "#001b22",
-  podium3:          "#001a1c",
+  podiumBg: "#001736",
+  podium2: "#001b22",
+  podium3: "#001a1c",
 
   // ── Accents ──────────────────────────────────────────────────
-  gold:             "#d4a843",
-  silver:           "#8fa8b8",
-  bronze:           "#9a6b3c",
-  error:            "#ba1a1a",
-  outline:          "#c4c6d0",
-  outlineVariant:   "rgba(196,198,208,0.5)",
+  gold: "#d4a843",
+  silver: "#8fa8b8",
+  bronze: "#9a6b3c",
+  error: "#ba1a1a",
+  outline: "#c4c6d0",
+  outlineVariant: "rgba(196,198,208,0.5)",
 };
 
 const LEVEL_LABELS = { 1: "Beginner", 2: "Intermediate", 3: "Advanced" };
 const MEDAL = {
-  1: { color: C.gold,   glow: "#d4a84325", emoji: "🥇" },
+  1: { color: C.gold, glow: "#d4a84325", emoji: "🥇" },
   2: { color: C.silver, glow: "#8fa8b820", emoji: "🥈" },
   3: { color: C.bronze, glow: "#9a6b3c20", emoji: "🥉" },
 };
@@ -290,7 +290,7 @@ function LeaderboardRow({ entry, index, isCurrent }) {
     >
       {/* Rank */}
       <div style={{ width: 40, textAlign: "center", flexShrink: 0, fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: 14, color: isCurrent ? C.teal : C.textMuted }}>
-        {entry.rank <= 3 ? ["🥇","🥈","🥉"][entry.rank - 1] : entry.rank}
+        {entry.rank <= 3 ? ["🥇", "🥈", "🥉"][entry.rank - 1] : entry.rank}
       </div>
 
       {/* Player */}
@@ -394,8 +394,12 @@ function Navbar({ unreadCount, onBellClick }) {
 
       {/* Nav links */}
       <nav style={{ display: "flex", gap: 32 }}>
-        {["Overview", "Marketplace", "Network", "Insights"].map((item, i) => (
-          <a key={item} href="#" style={{
+        {["Overview", "Leaderboard", "Achievements", "Insights"].map((item, i) => (
+          <a key={item} href="#" onClick={e => {
+            e.preventDefault();
+            if (item === "Leaderboard") window.__navigate("leaderboard");
+            if (item === "Achievements") window.__navigate("achievements");
+          }} style={{
             fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11,
             letterSpacing: "0.08em", textTransform: "uppercase",
             color: i === 0 ? C.textOnDark : C.navMuted,
@@ -447,9 +451,9 @@ function Navbar({ unreadCount, onBellClick }) {
 // ── Sidebar — light theme (matches screenshot) ────────────────
 function Sidebar() {
   const items = [
-    { icon: "⊞", label: "Overview"  },
+    { icon: "⊞", label: "Overview" },
     { icon: "📁", label: "Portfolio" },
-    { icon: "⬡",  label: "Network"   },
+    { icon: "⬡", label: "Network" },
     { icon: "📈", label: "Analytics" },
     { icon: "📄", label: "Documents" },
   ];
@@ -593,19 +597,19 @@ function StatusMsg({ loading, error }) {
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
 export default function LeaderboardPage() {
-  const [period, setPeriod]               = useState("weekly");
-  const [leaderboard, setLeaderboard]     = useState([]);
-  const [loading, setLoading]             = useState(true);
-  const [error, setError]                 = useState(null);
+  const [period, setPeriod] = useState("weekly");
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount]     = useState(0);
-  const [showPanel, setShowPanel]         = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showPanel, setShowPanel] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res  = await fetch(`${API_BASE}/api/leaderboard?period=${period}&limit=50`, { headers: { "x-user-id": CURRENT_USER_ID } });
+      const res = await fetch(`${API_BASE}/api/leaderboard?period=${period}&limit=50`, { headers: { "x-user-id": CURRENT_USER_ID } });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (!data.success) throw new Error(data.error);
@@ -645,7 +649,7 @@ export default function LeaderboardPage() {
   useEffect(() => { fetchLeaderboard(); }, [fetchLeaderboard]);
   useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
-  const podium    = [
+  const podium = [
     leaderboard.find(e => e.rank === 2) || null,
     leaderboard.find(e => e.rank === 1) || null,
     leaderboard.find(e => e.rank === 3) || null,
@@ -757,7 +761,7 @@ export default function LeaderboardPage() {
 
                   {/* Column headers */}
                   <div style={{ display: "flex", padding: "0 16px", marginBottom: 8 }}>
-                    {[["#",40],["Player",210],["Points","1fr"],["Level",130],["XP",60]].map(([h,w]) => (
+                    {[["#", 40], ["Player", 210], ["Points", "1fr"], ["Level", 130], ["XP", 60]].map(([h, w]) => (
                       <div key={h} style={{ width: typeof w === "number" ? w : undefined, flex: w === "1fr" ? 1 : undefined, flexShrink: 0, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 9, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em" }}>
                         {h}
                       </div>
@@ -768,11 +772,11 @@ export default function LeaderboardPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
                     {tableRows.length === 0
                       ? <div style={{ padding: "24px 0", textAlign: "center", fontFamily: "'Inter', sans-serif", fontSize: 13, color: C.textMuted }}>
-                          Only {leaderboard.length} user{leaderboard.length !== 1 ? "s" : ""} on the board so far.
-                        </div>
+                        Only {leaderboard.length} user{leaderboard.length !== 1 ? "s" : ""} on the board so far.
+                      </div>
                       : tableRows.map((entry, i) => (
-                          <LeaderboardRow key={entry.user_id} entry={entry} index={i} isCurrent={entry.user_id === CURRENT_USER_ID} />
-                        ))
+                        <LeaderboardRow key={entry.user_id} entry={entry} index={i} isCurrent={entry.user_id === CURRENT_USER_ID} />
+                      ))
                     }
                   </div>
                 </div>
