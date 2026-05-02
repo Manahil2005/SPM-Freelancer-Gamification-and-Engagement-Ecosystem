@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // =============================================================
 // AchievementsPage.jsx — Module 11
@@ -336,6 +336,47 @@ function ChallengeRow({ challenge, onEdit, onDelete }) {
   );
 }
 
+// ── Notification Panel ────────────────────────────────────────
+function NotificationPanel({ notifications, onMarkRead, onMarkAll, onDelete, onClose }) {
+  const typeIcon = { points: "⭐", level_up: "⬆️", badge: "🏅", challenge: "🎯" };
+  return (
+    <div style={{ position: "fixed", top: 64, right: 0, width: 340, bottom: 0, background: C.surfaceCard, boxShadow: "-4px 0 20px rgba(0,23,54,0.1)", zIndex: 200, display: "flex", flexDirection: "column", animation: "slideRight 0.22s ease both", borderLeft: `1px solid ${C.sidebarBorder}` }}>
+      <div style={{ padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${C.sidebarBorder}`, background: C.surfaceLow }}>
+        <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: 15, color: C.primary }}>Notifications</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onMarkAll} style={{ background: C.primary, color: "#fff", border: "none", borderRadius: 6, padding: "4px 10px", fontFamily: "'Inter', sans-serif", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Mark all read</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", color: C.textMuted }}>×</button>
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {notifications.length === 0
+          ? <div style={{ padding: 32, textAlign: "center", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 13 }}>No notifications</div>
+          : notifications.map(n => (
+            <div key={n.notification_id} onClick={() => !n.is_read && onMarkRead(n.notification_id)}
+              style={{ padding: "12px 20px", borderBottom: `1px solid ${C.outline}22`, background: n.is_read ? C.surfaceCard : C.surfaceLow, cursor: n.is_read ? "default" : "pointer", display: "flex", gap: 12, alignItems: "flex-start", position: "relative" }}
+            >
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{typeIcon[n.notification_type] || "🔔"}</span>
+              <div style={{ flex: 1, paddingRight: 20 }}>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textPrimary, fontWeight: n.is_read ? 400 : 600, lineHeight: "18px" }}>{n.message || n.title}</div>
+                <div style={{ fontFamily: "'Inter', sans-serif", fontSize: 10, color: C.textMuted, marginTop: 3 }}>
+                  {new Date(n.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  {!n.is_read && <span style={{ marginLeft: 6, color: C.tealOnLight, fontWeight: 700, fontSize: 9 }}>● NEW</span>}
+                </div>
+              </div>
+              <button
+                onClick={e => { e.stopPropagation(); onDelete(n.notification_id); }}
+                style={{ position: "absolute", top: 10, right: 12, background: "none", border: "none", color: C.textMuted, fontSize: 14, cursor: "pointer", lineHeight: 1, padding: 2, borderRadius: 4 }}
+                onMouseEnter={e => { e.currentTarget.style.color = C.error; e.currentTarget.style.background = "#fff0f0"; }}
+                onMouseLeave={e => { e.currentTarget.style.color = C.textMuted; e.currentTarget.style.background = "none"; }}
+              >✕</button>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
 function Navbar({ onBellClick, unreadCount }) {
   return (
     <header style={{ position: "fixed", top: 0, left: 0, right: 0, height: 64, background: C.navBg, display: "flex", alignItems: "center", padding: "0 32px", gap: 40, zIndex: 100, borderBottom: `1px solid ${C.navBorder}` }}>
@@ -344,15 +385,16 @@ function Navbar({ onBellClick, unreadCount }) {
         <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 9, color: C.teal, letterSpacing: "0.2em", textTransform: "uppercase" }}>Professional</span>
       </div>
       <nav style={{ display: "flex", gap: 32 }}>
-        {["Overview", "Leaderboard", "Achievements", "Insights"].map((item, i) => (
-        <a key={item} href="#" onClick={e => {
-          e.preventDefault();
-          if (item === "Leaderboard")  window.__navigate("leaderboard");
-          if (item === "Achievements") window.__navigate("achievements");
-        }} style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: item === "Achievements" ? C.textOnDark : C.navMuted,
-textDecoration: "none",
-borderBottom: item === "Achievements" ? `2px solid ${C.teal}` : "none",
-paddingBottom: 2, }}>{item}</a>
+        {["Overview", "Leaderboard", "Achievements", "Insights"].map((item) => (
+          <a key={item} href="#" onClick={e => {
+            e.preventDefault();
+            if (item === "Leaderboard")  window.__navigate("leaderboard");
+            if (item === "Achievements") window.__navigate("achievements");
+          }} style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: item === "Achievements" ? C.textOnDark : C.navMuted,
+            textDecoration: "none",
+            borderBottom: item === "Achievements" ? `2px solid ${C.teal}` : "none",
+            paddingBottom: 2,
+          }}>{item}</a>
         ))}
       </nav>
       <div style={{ flex: 1, maxWidth: 380 }}>
@@ -413,7 +455,10 @@ function Sidebar() {
 // ═══════════════════════════════════════════════════════════════
 export default function AchievementsPage() {
   // ── Tab ───────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("badges"); // badges | levels | challenges
+  const [activeTab,      setActiveTab]      = useState("badges");
+  const [notifications,  setNotifications]  = useState([]);
+  const [unreadCount,    setUnreadCount]     = useState(0);
+  const [showPanel,      setShowPanel]       = useState(false);
 
   // ── Shared ───────────────────────────────────────────────
   const [loading,   setLoading]   = useState(false);
@@ -422,26 +467,26 @@ export default function AchievementsPage() {
   const [adminView, setAdminView] = useState(false);
 
   // ── Badges state ──────────────────────────────────────────
-  const [allBadges,    setAllBadges]    = useState([]);
-  const [badgePage,    setBadgePage]    = useState(1);
-  const [showAddBadge, setShowAddBadge] = useState(false);
-  const [editBadge,    setEditBadge]    = useState(null);
-  const [addBadgeForm, setAddBadgeForm] = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
-  const [editBadgeForm,setEditBadgeForm]= useState({ description: "", points_awarded: "", is_active: true });
+  const [allBadges,     setAllBadges]     = useState([]);
+  const [badgePage,     setBadgePage]     = useState(1);
+  const [showAddBadge,  setShowAddBadge]  = useState(false);
+  const [editBadge,     setEditBadge]     = useState(null);
+  const [addBadgeForm,  setAddBadgeForm]  = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
+  const [editBadgeForm, setEditBadgeForm] = useState({ description: "", points_awarded: "", is_active: true });
 
   // ── Levels state ──────────────────────────────────────────
-  const [levels,     setLevels]     = useState([]);
-  const [editLevel,  setEditLevel]  = useState(null);
+  const [levels,        setLevels]        = useState([]);
+  const [editLevel,     setEditLevel]     = useState(null);
   const [editLevelForm, setEditLevelForm] = useState({ min_points: "", max_points: "", title: "" });
 
   // ── Challenges state ──────────────────────────────────────
-  const [challenges,      setChallenges]      = useState([]);
-  const [challengePage,   setChallengePage]   = useState(1);
-  const [filterType,      setFilterType]      = useState("all");
-  const [showAddChallenge,setShowAddChallenge]= useState(false);
-  const [editChallenge,   setEditChallenge]   = useState(null);
-  const [addChallengeForm,setAddChallengeForm]= useState({ challenge_code: "", title: "", description: "", target_count: "1", reward_points: "50", expiry_days: "7", challenge_type: "daily", action_required: "" });
-  const [editChallengeForm,setEditChallengeForm]=useState({ title: "", description: "", target_count: "", reward_points: "", expiry_days: "", is_active: true });
+  const [challenges,        setChallenges]        = useState([]);
+  const [challengePage,     setChallengePage]     = useState(1);
+  const [filterType,        setFilterType]        = useState("all");
+  const [showAddChallenge,  setShowAddChallenge]  = useState(false);
+  const [editChallenge,     setEditChallenge]     = useState(null);
+  const [addChallengeForm,  setAddChallengeForm]  = useState({ challenge_code: "", title: "", description: "", target_count: "1", reward_points: "50", expiry_days: "7", challenge_type: "daily", action_required: "" });
+  const [editChallengeForm, setEditChallengeForm] = useState({ title: "", description: "", target_count: "", reward_points: "", expiry_days: "", is_active: true });
 
   const badgesPerPage     = adminView ? 3 : 4;
   const challengesPerPage = 8;
@@ -478,7 +523,46 @@ export default function AchievementsPage() {
 
   const fetchAll = () => { fetchBadges(); fetchLevels(); fetchChallenges(); };
 
-  useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const [nr, cr] = await Promise.all([
+        fetch(`${API_BASE}/api/notifications/${CURRENT_USER_ID}`, { headers: authHeaders }),
+        fetch(`${API_BASE}/api/notifications/${CURRENT_USER_ID}/unread-count`, { headers: authHeaders }),
+      ]);
+      if (nr.ok) { const d = await nr.json(); if (d.success) setNotifications(d.notifications || []); }
+      if (cr.ok) { const d = await cr.json(); if (d.success) setUnreadCount(d.unread_count || 0); }
+    } catch { /* silent */ }
+  }, []);
+
+  const markRead = async (id) => {
+    try {
+      await fetch(`${API_BASE}/api/notifications/${CURRENT_USER_ID}/${id}/read`, { method: "PUT", headers: authHeaders });
+      setNotifications(p => p.map(n => n.notification_id === id ? { ...n, is_read: true } : n));
+      setUnreadCount(c => Math.max(0, c - 1));
+    } catch { /* silent */ }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await fetch(`${API_BASE}/api/notifications/${CURRENT_USER_ID}/read-all`, { method: "PUT", headers: authHeaders });
+      setNotifications(p => p.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch { /* silent */ }
+  };
+
+  const deleteNotification = async (id) => {
+    try {
+      await fetch(`${API_BASE}/api/notifications/${CURRENT_USER_ID}/${id}`, { method: "DELETE", headers: authHeaders });
+      setNotifications(p => {
+        const was = p.find(n => n.notification_id === id);
+        if (was && !was.is_read) setUnreadCount(c => Math.max(0, c - 1));
+        return p.filter(n => n.notification_id !== id);
+      });
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => { fetchAll(); }, []);  // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchNotifications(); }, [fetchNotifications]);
 
   // ── Badge handlers ────────────────────────────────────────
   const handleAddBadge = async () => {
@@ -511,7 +595,7 @@ export default function AchievementsPage() {
   // ── Level handlers ────────────────────────────────────────
   const handleEditLevel = async () => {
     try {
-      await apiFetch(`${API_BASE}/api/gamification/admin/level-thresholds`, { method: "PUT",body: JSON.stringify({ level_number: editLevel.level_number, min_points: parseInt(editLevelForm.min_points), max_points: editLevelForm.max_points ? parseInt(editLevelForm.max_points) : null, title: editLevelForm.title }) });
+      await apiFetch(`${API_BASE}/api/gamification/admin/level-thresholds`, { method: "PUT", body: JSON.stringify({ level_number: editLevel.level_number, min_points: parseInt(editLevelForm.min_points), max_points: editLevelForm.max_points ? parseInt(editLevelForm.max_points) : null, title: editLevelForm.title }) });
       setEditLevel(null); await fetchLevels(); showToast("Level updated!");
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -551,7 +635,7 @@ export default function AchievementsPage() {
   const visibleBadges   = displayBadges.slice((badgePage - 1) * badgesPerPage, badgePage * badgesPerPage);
 
   // ── Challenge filtering + pagination ──────────────────────
-  const filteredChallenges = filterType === "all" ? challenges : challenges.filter(c => c.challenge_type === filterType);
+  const filteredChallenges  = filterType === "all" ? challenges : challenges.filter(c => c.challenge_type === filterType);
   const totalChallengePages = Math.max(1, Math.ceil(filteredChallenges.length / challengesPerPage));
   const visibleChallenges   = filteredChallenges.slice((challengePage - 1) * challengesPerPage, challengePage * challengesPerPage);
 
@@ -579,6 +663,7 @@ export default function AchievementsPage() {
         @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
         @keyframes spin      { to { transform: rotate(360deg); } }
         @keyframes slideDown { from { opacity:0; transform:translateY(-10px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes slideRight { from { transform:translateX(100%); } to { transform:translateX(0); } }
         ::-webkit-scrollbar { height: 4px; width: 4px; }
         ::-webkit-scrollbar-thumb { background: ${C.outline}; border-radius: 3px; }
       `}</style>
@@ -671,7 +756,16 @@ export default function AchievementsPage() {
       )}
 
       <div style={{ minHeight: "100vh", background: C.pageBg }}>
-        <Navbar unreadCount={0} onBellClick={() => { }} />
+        <Navbar unreadCount={unreadCount} onBellClick={() => setShowPanel(p => !p)} />
+        {showPanel && (
+          <NotificationPanel
+            notifications={notifications}
+            onMarkRead={markRead}
+            onMarkAll={markAllRead}
+            onDelete={deleteNotification}
+            onClose={() => setShowPanel(false)}
+          />
+        )}
         <Sidebar />
 
         <main style={{ marginLeft: 224, paddingTop: 64, minHeight: "100vh" }}>
@@ -708,7 +802,7 @@ export default function AchievementsPage() {
               {error && !loading && (
                 <div style={{ padding: "12px 16px", background: "#fff5f5", border: `1px solid ${C.error}33`, borderRadius: 8, color: C.error, fontFamily: "'Inter', sans-serif", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
                   <span>⚠ {error}</span>
-                  <button onClick={fetchBadges} style={{ marginLeft: "auto", background: C.error, color: "#fff", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
+                  <button onClick={fetchAll} style={{ marginLeft: "auto", background: C.error, color: "#fff", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
                 </div>
               )}
 
