@@ -1,28 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 // =============================================================
 // AchievementsPage.jsx — Module 11
+// Tabs: Badges | Levels | Challenges
 //
-// Scope:
-//   ✅ Levels section — shows user's current level (our data)
-//   ✅ Badge definitions — shows all badges that exist in system
-//   ✅ Admin: Add / Edit / Deactivate badges
-//   ❌ Earned/Locked badge state — handled by other module (Module 1)
-//   ❌ "My Achievements" — handled by other module (Module 1)
-//
-// APIs used:
-//   GET  /api/gamification/user/:id/profile   → level + points
-//   GET  /api/gamification/admin/badges        → all badge definitions
-//   POST /api/gamification/admin/badges        → add badge
-//   PATCH /api/gamification/admin/badges/:code → edit badge
-//   DELETE /api/gamification/admin/badges/:code → deactivate badge
+// Badges:    View all | Admin: add/edit/deactivate
+// Levels:    View all | Admin: edit XP thresholds
+// Challenges: View all | Admin: add/edit/delete
 // =============================================================
 
 const API_BASE        = "";
 const CURRENT_USER_ID = parseInt(import.meta.env.VITE_USER_ID || "1", 10);
-const IS_ADMIN        = true; // replace with auth context in production
+const IS_ADMIN        = true; // Set to true to enable admin features (or implement real auth flow in the future)
 
-// ── Theme ─────────────────────────────────────────────────────
 const C = {
   navBg:            "#001736",
   navMuted:         "rgba(255,255,255,0.55)",
@@ -60,23 +50,25 @@ const C = {
   paginationText:   "#00132E",
 };
 
-// ── Level definitions ─────────────────────────────────────────
-const LEVEL_DEFS = [
-  { level: 1, title: "Beginner",     xp_required: 0,    icon: "🌱", color: "#007a6e", desc: "Starting your journey on the platform" },
-  { level: 2, title: "Intermediate", xp_required: 1000, icon: "⚡", color: "#001736", desc: "Building momentum and gaining experience" },
-  { level: 3, title: "Advanced",     xp_required: 2500, icon: "🏆", color: "#001b18", desc: "Master achiever — top of the platform" },
-];
-
-// ── Badge icon/colour map for known badge codes ───────────────
+// ── Badge style map ───────────────────────────────────────────
 const BADGE_STYLE_MAP = {
   first_project:        { icon: "🎯", grad: ["#1976d2","#42a5f5"] },
   rising_star:          { icon: "⭐", grad: ["#f57c00","#ffca28"] },
   consistent_performer: { icon: "🔥", grad: ["#e53935","#ff7043"] },
   top_rated:            { icon: "💎", grad: ["#7b1fa2","#ce93d8"] },
-  challenge_master:     { icon: "🏅", grad: ["#00796b","#80cbc4"] },
+  challenge_master:     { icon: "🏅", grad: ["#777480","#808080"] },
 };
 const DEFAULT_STYLE = { icon: "🎖", grad: ["#546e7a","#90a4ae"] };
 const getBadgeStyle = code => BADGE_STYLE_MAP[(code || "").toLowerCase()] || DEFAULT_STYLE;
+
+// ── Challenge type colours ────────────────────────────────────
+const CHALLENGE_COLORS = {
+  daily:      { bg: "#e8f5e9", border: "#a5d6a7", color: "#2e7d32", icon: "☀️" },
+  weekly:     { bg: "#e3f2fd", border: "#90caf9", color: "#1565c0", icon: "📅" },
+  monthly:    { bg: "#f3e5f5", border: "#ce93d8", color: "#6a1b9a", icon: "🗓" },
+  onboarding: { bg: "#fff8e1", border: "#ffe082", color: "#f57f17", icon: "🚀" },
+};
+const getChallengeStyle = type => CHALLENGE_COLORS[type] || { bg: C.surfaceLow, border: C.outline, color: C.textPrimary, icon: "🎯" };
 
 // ── SVG Badge Logos ───────────────────────────────────────────
 const BadgeLogo = {
@@ -159,11 +151,11 @@ async function apiFetch(url, options = {}) {
   return data;
 }
 
-// ── Modal ─────────────────────────────────────────────────────
+// ── Reusable components ───────────────────────────────────────
 function Modal({ title, onClose, children }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 999, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: 480, maxWidth: "90vw", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 32, width: 480, maxWidth: "90vw", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 20, color: C.textPrimary }}>{title}</span>
           <button onClick={onClose} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.textMuted }}>✕</button>
@@ -174,12 +166,16 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-function Field({ label, value, onChange, type = "text", placeholder = "", disabled = false, hint = "" }) {
+function Field({ label, value, onChange, type = "text", placeholder = "", disabled = false, hint = "", options = null }) {
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={{ display: "block", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{label}</label>
       {type === "textarea"
         ? <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={3} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.outline}`, fontFamily: "'Inter', sans-serif", fontSize: 14, color: C.textPrimary, resize: "vertical", outline: "none", boxSizing: "border-box" }} />
+        : options
+        ? <select value={value} onChange={e => onChange(e.target.value)} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.outline}`, fontFamily: "'Inter', sans-serif", fontSize: 14, color: C.textPrimary, outline: "none", boxSizing: "border-box", background: "#fff" }}>
+            {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         : <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} disabled={disabled} style={{ width: "100%", padding: "10px 12px", borderRadius: 8, border: `1px solid ${C.outline}`, fontFamily: "'Inter', sans-serif", fontSize: 14, color: C.textPrimary, outline: "none", boxSizing: "border-box", background: disabled ? C.surfaceLow : "#fff" }} />
       }
       {hint && <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted, marginTop: 4, display: "block" }}>{hint}</span>}
@@ -187,57 +183,62 @@ function Field({ label, value, onChange, type = "text", placeholder = "", disabl
   );
 }
 
-// ── Badge Card (view mode — no earned state) ──────────────────
+function Pagination({ current, total, onChange }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", height: 31 }}>
+      <button onClick={() => onChange(Math.max(1, current - 1))} disabled={current === 1} style={{ width: 30, height: 31, background: "transparent", border: `1px solid ${C.paginationBorder}`, borderRadius: "3.2px 0 0 3.2px", cursor: current === 1 ? "not-allowed" : "pointer", color: current === 1 ? C.textMuted : C.paginationText, fontSize: 13 }}>‹</button>
+      {Array.from({ length: total }, (_, i) => i + 1).map(page => (
+        <button key={page} onClick={() => onChange(page)} style={{ width: 26, height: 31, background: current === page ? C.paginationActive : "transparent", border: `1px solid ${current === page ? C.paginationActive : C.paginationBorder}`, borderLeft: "none", fontFamily: "'Inter', sans-serif", fontSize: 12, color: current === page ? "#fff" : C.paginationText, cursor: "pointer" }}>{page}</button>
+      ))}
+      <button onClick={() => onChange(Math.min(total, current + 1))} disabled={current === total} style={{ width: 30, height: 31, background: "transparent", border: `1px solid ${C.paginationBorder}`, borderLeft: "none", borderRadius: "0 4px 4px 0", cursor: current === total ? "not-allowed" : "pointer", color: current === total ? C.textMuted : C.paginationText, fontSize: 13 }}>›</button>
+    </div>
+  );
+}
+
+// ── Badge Card (view) ─────────────────────────────────────────
 function BadgeCard({ badge }) {
   const style = getBadgeStyle(badge.badge_code);
   const Logo  = BadgeLogo[(badge.badge_code || "").toLowerCase()];
   return (
-    <div style={{ boxSizing: "border-box", width: 271, height: 339, flexShrink: 0, border: `2px solid ${style.grad[0]}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: C.surfaceCard, boxShadow: `0 2px 12px ${style.grad[0]}33`, transition: "transform 0.2s, box-shadow 0.2s" }}
+    <div style={{ boxSizing: "border-box", width: 271, height: 339, flexShrink: 0, border: `2px solid ${style.grad[0]}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: C.surfaceCard, boxShadow: `0 2px 12px ${style.grad[0]}22`, transition: "transform 0.2s, box-shadow 0.2s" }}
       onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,23,54,0.12)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = `0 2px 12px ${style.grad[0]}33`; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = `0 2px 12px ${style.grad[0]}22`; }}
     >
-      {/* Media */}
       <div style={{ width: "100%", height: 188, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}cc, ${style.grad[1]}ee)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         {Logo ? <Logo size={90} /> : <span style={{ fontSize: 60 }}>{style.icon}</span>}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0%, transparent 65%)" }} />
-        {/* Points pill */}
         <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "'Inter', sans-serif", padding: "2px 8px", borderRadius: 9999 }}>+{badge.points_awarded} pts</div>
-        {/* Category pill */}
-        <div style={{ position: "absolute", top: 10, left: 10, background: C.teal, color: C.textOnTeal, fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase", letterSpacing: "0.05em" }}>{badge.category}</div>
+        <div style={{ position: "absolute", top: 10, left: 10, background: C.teal, color: C.textOnTeal, fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase" }}>{badge.category}</div>
       </div>
-      {/* Text */}
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 16, lineHeight: "24px", color: "#111c2d" }}>{badge.name}</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 400, fontSize: 13, lineHeight: "20px", color: "#43474f" }}>{badge.description}</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 16, color: "#111c2d" }}>{badge.name}</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#43474f" }}>{badge.description}</span>
         <div style={{ marginTop: "auto", fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted }}>
-          Code: <code style={{ background: C.surfaceLow, padding: "1px 5px", borderRadius: 4, fontSize: 11 }}>{badge.badge_code}</code>
+          Code: <code style={{ background: C.surfaceLow, padding: "1px 5px", borderRadius: 4 }}>{badge.badge_code}</code>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Badge Manage Card (admin mode) ────────────────────────────
+// ── Badge Manage Card (admin) ─────────────────────────────────
 function BadgeManageCard({ badge, onEdit, onDelete }) {
   const style = getBadgeStyle(badge.badge_code);
   const Logo  = BadgeLogo[(badge.badge_code || "").toLowerCase()];
   const [confirmDelete, setConfirmDelete] = useState(false);
   return (
-    <div style={{ boxSizing: "border-box", width: 271, flexShrink: 0, border: `2px solid ${style.grad[0]}${badge.is_active ? "" : "44"}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: badge.is_active ? C.surfaceCard : C.surfaceLow, opacity: badge.is_active ? 1 : 0.6, transition: "transform 0.2s" }}
+    <div style={{ boxSizing: "border-box", width: 271, height: 339, flexShrink: 0, border: `2px solid ${style.grad[0]}${badge.is_active ? "" : "44"}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: badge.is_active ? C.surfaceCard : C.surfaceLow, opacity: badge.is_active ? 1 : 0.6, transition: "transform 0.2s" }}
       onMouseEnter={e => e.currentTarget.style.transform = "translateY(-3px)"}
       onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
     >
-      {/* Media */}
-      <div style={{ width: "100%", height: 140, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}${badge.is_active ? "cc" : "55"}, ${style.grad[1]}${badge.is_active ? "ee" : "77"})`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: 140, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}${badge.is_active ? "cc" : "55"}, ${style.grad[1]}${badge.is_active ? "ee" : "77"})`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
         {Logo ? <Logo size={70} /> : <span style={{ fontSize: 48 }}>{style.icon}</span>}
-        {/* Status pills */}
-        <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 4 }}>
+        <div style={{ position: "absolute", top: 8, left: 8 }}>
           {!badge.is_active && <span style={{ background: C.error, color: "#fff", fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase" }}>Inactive</span>}
         </div>
         <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "'Inter', sans-serif", padding: "2px 8px", borderRadius: 9999 }}>+{badge.points_awarded}pts</div>
       </div>
-      {/* Text */}
-      <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4, flex: 1 }}>
         <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: C.textPrimary }}>{badge.name}</span>
         <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted, lineHeight: "18px" }}>{badge.description}</span>
         <div style={{ display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
@@ -245,7 +246,6 @@ function BadgeManageCard({ badge, onEdit, onDelete }) {
           <code style={{ background: C.surfaceLow, padding: "2px 6px", borderRadius: 4, fontSize: 10, color: C.textMuted }}>{badge.badge_code}</code>
         </div>
       </div>
-      {/* Actions */}
       <div style={{ padding: "0 14px 14px", display: "flex", gap: 8 }}>
         <button onClick={() => onEdit(badge)} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.primary, cursor: "pointer" }}
           onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
@@ -260,6 +260,82 @@ function BadgeManageCard({ badge, onEdit, onDelete }) {
   );
 }
 
+// ── Level Row (view) ──────────────────────────────────────────
+function LevelRow({ level }) {
+  const icons = { 1: "🌱", 2: "⚡", 3: "🏆" };
+  const colors = { 1: "#007a6e", 2: "#001736", 3: "#001b18" };
+  const color = colors[level.level_number] || C.primary;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", border: `1px solid rgba(0,0,0,0.08)`, borderRadius: 12, background: C.surfaceCard, transition: "box-shadow 0.2s" }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,23,54,0.08)"}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+    >
+      <div style={{ width: 56, height: 56, borderRadius: 12, background: `${color}18`, border: `2px solid ${color}33`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, flexShrink: 0 }}>
+        {icons[level.level_number] || "⭐"}
+      </div>
+      <div style={{ flex: 1 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: C.textPrimary }}>Level {level.level_number}</span>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color }}>· {level.title}</span>
+        </div>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: C.textMuted }}>
+        {level.min_points === 0
+          ? "Starting level — all users begin here"
+          : `${parseInt(level.min_points).toLocaleString()} XP${level.max_points ? ` – ${parseInt(level.max_points).toLocaleString()} XP` : "+"}`
+        }
+      </span>
+      </div>
+      <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${color}22`, border: `2px solid ${color}55`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: 14, color, flexShrink: 0 }}>
+        {level.level_number}
+      </div>
+    </div>
+  );
+}
+
+// ── Challenge Row (view + admin) ──────────────────────────────
+function ChallengeRow({ challenge, onEdit, onDelete }) {
+  const cs = getChallengeStyle(challenge.challenge_type);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", border: `1px solid ${challenge.is_active ? cs.border : C.outline}`, borderRadius: 10, background: challenge.is_active ? cs.bg : C.surfaceLow, opacity: challenge.is_active ? 1 : 0.6, transition: "box-shadow 0.2s" }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 2px 10px rgba(0,23,54,0.08)"}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+    >
+      {/* Type icon */}
+      <div style={{ width: 40, height: 40, borderRadius: 10, background: "#fff", border: `1px solid ${cs.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>{cs.icon}</div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: C.textPrimary }}>{challenge.title}</span>
+          {!challenge.is_active && <span style={{ background: C.error, color: "#fff", fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "1px 6px", borderRadius: 9999, textTransform: "uppercase" }}>Inactive</span>}
+        </div>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>{challenge.description}</span>
+      </div>
+
+      {/* Meta */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+        <span style={{ background: cs.border, color: cs.color, fontSize: 10, fontWeight: 700, fontFamily: "'Inter', sans-serif", padding: "2px 8px", borderRadius: 9999, textTransform: "uppercase" }}>{challenge.challenge_type}</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted }}>Target: {challenge.target_count} · {challenge.reward_points} pts · {challenge.expiry_days}d</span>
+      </div>
+
+      {/* Admin actions */}
+      {IS_ADMIN && (
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => onEdit(challenge)} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 11, color: C.primary, cursor: "pointer" }}
+            onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
+            onMouseLeave={e => e.currentTarget.style.background = C.surfaceLow}
+          >✏️ Edit</button>
+          {!confirmDelete
+            ? <button onClick={() => setConfirmDelete(true)} style={{ padding: "6px 12px", borderRadius: 6, border: `1px solid ${C.error}44`, background: "#fff5f5", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 11, color: C.error, cursor: "pointer" }}>🗑</button>
+            : <button onClick={() => { onDelete(challenge.id); setConfirmDelete(false); }} style={{ padding: "6px 12px", borderRadius: 6, border: "none", background: C.error, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, color: "#fff", cursor: "pointer" }}>Sure?</button>
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Navbar({ onBellClick, unreadCount }) {
   return (
     <header style={{ position: "fixed", top: 0, left: 0, right: 0, height: 64, background: C.navBg, display: "flex", alignItems: "center", padding: "0 32px", gap: 40, zIndex: 100, borderBottom: `1px solid ${C.navBorder}` }}>
@@ -268,8 +344,15 @@ function Navbar({ onBellClick, unreadCount }) {
         <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 9, color: C.teal, letterSpacing: "0.2em", textTransform: "uppercase" }}>Professional</span>
       </div>
       <nav style={{ display: "flex", gap: 32 }}>
-        {["Overview", "Marketplace", "Network", "Insights"].map((item, i) => (
-          <a key={item} href="#" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: i === 0 ? C.textOnDark : C.navMuted, textDecoration: "none", borderBottom: i === 0 ? `2px solid ${C.teal}` : "none", paddingBottom: 2 }}>{item}</a>
+        {["Overview", "Leaderboard", "Achievements", "Insights"].map((item, i) => (
+        <a key={item} href="#" onClick={e => {
+          e.preventDefault();
+          if (item === "Leaderboard")  window.__navigate("leaderboard");
+          if (item === "Achievements") window.__navigate("achievements");
+        }} style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: item === "Achievements" ? C.textOnDark : C.navMuted,
+textDecoration: "none",
+borderBottom: item === "Achievements" ? `2px solid ${C.teal}` : "none",
+paddingBottom: 2, }}>{item}</a>
         ))}
       </nav>
       <div style={{ flex: 1, maxWidth: 380 }}>
@@ -325,151 +408,165 @@ function Sidebar() {
   );
 }
 
-function LevelCard({ def, isCurrentLevel, userPoints }) {
-  const unlocked = userPoints >= def.xp_required;
-  return (
-    <div style={{ boxSizing: "border-box", width: 310, height: 126, flexShrink: 0, border: `1px solid ${isCurrentLevel ? C.primary : "rgba(0,0,0,0.2)"}`, borderRadius: 8, display: "flex", alignItems: "center", padding: "0 16px", gap: 16, background: isCurrentLevel ? C.surfaceHigh : C.surfaceCard, transition: "box-shadow 0.2s", boxShadow: isCurrentLevel ? "0 2px 12px rgba(0,23,54,0.1)" : "none" }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,23,54,0.12)"}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = isCurrentLevel ? "0 2px 12px rgba(0,23,54,0.1)" : "none"}
-    >
-      <div style={{ width: 70, height: 50, flexShrink: 0, background: unlocked ? `${def.color}22` : C.levelIconBg, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, border: isCurrentLevel ? `2px solid ${def.color}55` : "none" }}>
-        {unlocked ? def.icon : "🔒"}
-      </div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: unlocked ? C.textPrimary : C.textMuted }}>Level {def.level}</span>
-          {isCurrentLevel && <span style={{ background: C.teal, color: C.textOnTeal, fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase" }}>Current</span>}
-        </div>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: unlocked ? def.color : C.textMuted }}>{def.title}</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>{def.xp_required === 0 ? "Starting level" : `${def.xp_required.toLocaleString()} XP required`}</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted, fontStyle: "italic" }}>{def.desc}</span>
-      </div>
-      <div style={{ width: 10, height: 10, borderRadius: "50%", background: unlocked ? "#4caf50" : C.dotInactive, flexShrink: 0 }} />
-    </div>
-  );
-}
-
-function Pagination({ current, total, onChange }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", height: 31 }}>
-      <button onClick={() => onChange(Math.max(1, current - 1))} disabled={current === 1} style={{ width: 30, height: 31, background: "transparent", border: `1px solid ${C.paginationBorder}`, borderRadius: "3.2px 0 0 3.2px", cursor: current === 1 ? "not-allowed" : "pointer", color: current === 1 ? C.textMuted : C.paginationText, fontSize: 13 }}>‹</button>
-      {Array.from({ length: total }, (_, i) => i + 1).map(page => (
-        <button key={page} onClick={() => onChange(page)} style={{ width: 26, height: 31, background: current === page ? C.paginationActive : "transparent", border: `1px solid ${current === page ? C.paginationActive : C.paginationBorder}`, borderLeft: "none", fontFamily: "'Inter', sans-serif", fontSize: 12, color: current === page ? "#fff" : C.paginationText, cursor: "pointer" }}>{page}</button>
-      ))}
-      <button onClick={() => onChange(Math.min(total, current + 1))} disabled={current === total} style={{ width: 30, height: 31, background: "transparent", border: `1px solid ${C.paginationBorder}`, borderLeft: "none", borderRadius: "0 4px 4px 0", cursor: current === total ? "not-allowed" : "pointer", color: current === total ? C.textMuted : C.paginationText, fontSize: 13 }}>›</button>
-    </div>
-  );
-}
-
-function PaginationDots({ total, current }) {
-  return (
-    <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-      {Array.from({ length: total }, (_, i) => (
-        <div key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: i === current ? C.primary : C.dotInactive, transition: "background 0.2s" }} />
-      ))}
-    </div>
-  );
-}
-
 // ═══════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
 export default function AchievementsPage() {
-  const [userLevel,   setUserLevel]   = useState(1);
-  const [userPoints,  setUserPoints]  = useState(0);
-  const [allBadges,   setAllBadges]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [toast,       setToast]       = useState(null);
-  const [badgePage,   setBadgePage]   = useState(1);
-  const [levelDot,    setLevelDot]    = useState(0);
-  const [adminView,   setAdminView]   = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editBadge,   setEditBadge]   = useState(null);
-  const [addForm,     setAddForm]     = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
-  const [editForm,    setEditForm]    = useState({ description: "", points_awarded: "", is_active: true });
+  // ── Tab ───────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState("badges"); // badges | levels | challenges
 
-  const badgesPerPage  = adminView ? 3 : 4;
-  const levelScrollRef = useRef(null);
+  // ── Shared ───────────────────────────────────────────────
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState(null);
+  const [toast,     setToast]     = useState(null);
+  const [adminView, setAdminView] = useState(false);
 
-  const showToast = (msg, type = "success") => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  // ── Badges state ──────────────────────────────────────────
+  const [allBadges,    setAllBadges]    = useState([]);
+  const [badgePage,    setBadgePage]    = useState(1);
+  const [showAddBadge, setShowAddBadge] = useState(false);
+  const [editBadge,    setEditBadge]    = useState(null);
+  const [addBadgeForm, setAddBadgeForm] = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
+  const [editBadgeForm,setEditBadgeForm]= useState({ description: "", points_awarded: "", is_active: true });
 
-  // ── Fetch ─────────────────────────────────────────────────
-  const fetchAll = async () => {
-    setLoading(true);
-    setError(null);
+  // ── Levels state ──────────────────────────────────────────
+  const [levels,     setLevels]     = useState([]);
+  const [editLevel,  setEditLevel]  = useState(null);
+  const [editLevelForm, setEditLevelForm] = useState({ min_points: "", max_points: "", title: "" });
+
+  // ── Challenges state ──────────────────────────────────────
+  const [challenges,      setChallenges]      = useState([]);
+  const [challengePage,   setChallengePage]   = useState(1);
+  const [filterType,      setFilterType]      = useState("all");
+  const [showAddChallenge,setShowAddChallenge]= useState(false);
+  const [editChallenge,   setEditChallenge]   = useState(null);
+  const [addChallengeForm,setAddChallengeForm]= useState({ challenge_code: "", title: "", description: "", target_count: "1", reward_points: "50", expiry_days: "7", challenge_type: "daily", action_required: "" });
+  const [editChallengeForm,setEditChallengeForm]=useState({ title: "", description: "", target_count: "", reward_points: "", expiry_days: "", is_active: true });
+
+  const badgesPerPage     = adminView ? 3 : 4;
+  const challengesPerPage = 8;
+
+  const showToast = (msg, type = "success") => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000); };
+
+  // ── Fetch functions ───────────────────────────────────────
+  const fetchBadges = async () => {
+    setLoading(true); setError(null);
     try {
-      // Profile — for level display only
-      const profileData = await apiFetch(`${API_BASE}/api/gamification/user/${CURRENT_USER_ID}/profile`);
-      setUserLevel(profileData.data.current_level || 1);
-      setUserPoints(profileData.data.total_points  || 0);
-
-      // All badge definitions — no earned state needed
-      const badgeData = await apiFetch(`${API_BASE}/api/gamification/admin/badges`);
-      setAllBadges(badgeData.data || []);
-    } catch (err) {
-      setError(`Could not load data: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
+      const d = await apiFetch(`${API_BASE}/api/gamification/admin/badges`);
+      setAllBadges(d.data || []);
+    } catch (err) { setError(`Badges: ${err.message}`); }
+    finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    (async () => {
-      await fetchAll();
-    })();
-  }, []);
+  const fetchLevels = async () => {
+    setLoading(true); setError(null);
+    try {
+      const d = await apiFetch(`${API_BASE}/api/gamification/admin/level-thresholds`);
+      setLevels(d.data || []);
+    } catch (err) { setError(`Levels: ${err.message}`); }
+    finally { setLoading(false); }
+  };
 
-  // ── Add ───────────────────────────────────────────────────
+  const fetchChallenges = async () => {
+    setLoading(true); setError(null);
+    try {
+      const d = await apiFetch(`${API_BASE}/api/gamification/admin/challenges`);
+      setChallenges(d.data || []);
+    } catch (err) { setError(`Challenges: ${err.message}`); }
+    finally { setLoading(false); }
+  };
+
+  const fetchAll = () => { fetchBadges(); fetchLevels(); fetchChallenges(); };
+
+  useEffect(() => { fetchAll(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Badge handlers ────────────────────────────────────────
   const handleAddBadge = async () => {
-    if (!addForm.badge_code || !addForm.name) return showToast("Badge code and name are required", "error");
+    if (!addBadgeForm.badge_code || !addBadgeForm.name) return showToast("Badge code and name required", "error");
     try {
-      await apiFetch(`${API_BASE}/api/gamification/admin/badges`, {
-        method: "POST",
-        body: JSON.stringify({ ...addForm, points_awarded: parseInt(addForm.points_awarded) || 0 }),
-      });
-      setShowAddModal(false);
-      setAddForm({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
-      await fetchAll();
-      showToast("Badge added successfully!");
+      await apiFetch(`${API_BASE}/api/gamification/admin/badges`, { method: "POST", body: JSON.stringify({ ...addBadgeForm, points_awarded: parseInt(addBadgeForm.points_awarded) || 0 }) });
+      setShowAddBadge(false);
+      setAddBadgeForm({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
+      await fetchBadges();
+      showToast("Badge added!");
     } catch (err) { showToast(err.message, "error"); }
   };
 
-  // ── Edit ──────────────────────────────────────────────────
   const handleEditBadge = async () => {
-    if (!editBadge) return;
     try {
-      await apiFetch(`${API_BASE}/api/gamification/admin/badges/${editBadge.badge_code}`, {
-        method: "PATCH",
-        body: JSON.stringify({ description: editForm.description, points_awarded: parseInt(editForm.points_awarded), is_active: editForm.is_active }),
-      });
-      setEditBadge(null);
-      await fetchAll();
-      showToast("Badge updated successfully!");
+      await apiFetch(`${API_BASE}/api/gamification/admin/badges/${editBadge.badge_code}`, { method: "PATCH", body: JSON.stringify({ description: editBadgeForm.description, points_awarded: parseInt(editBadgeForm.points_awarded), is_active: editBadgeForm.is_active }) });
+      setEditBadge(null); await fetchBadges(); showToast("Badge updated!");
     } catch (err) { showToast(err.message, "error"); }
   };
 
-  // ── Delete ────────────────────────────────────────────────
-  const handleDeleteBadge = async (badgeCode) => {
+  const handleDeleteBadge = async (code) => {
     try {
-      await apiFetch(`${API_BASE}/api/gamification/admin/badges/${badgeCode}`, { method: "DELETE" });
-      await fetchAll();
-      showToast("Badge deactivated.");
+      await apiFetch(`${API_BASE}/api/gamification/admin/badges/${code}`, { method: "DELETE" });
+      await fetchBadges(); showToast("Badge deleted.");
     } catch (err) { showToast(err.message, "error"); }
   };
 
-  const openEdit = (badge) => {
-    setEditBadge(badge);
-    setEditForm({ description: badge.description || "", points_awarded: String(badge.points_awarded || 0), is_active: badge.is_active });
+  const openEditBadge = (b) => { setEditBadge(b); setEditBadgeForm({ description: b.description || "", points_awarded: String(b.points_awarded || 0), is_active: b.is_active }); };
+
+  // ── Level handlers ────────────────────────────────────────
+  const handleEditLevel = async () => {
+    try {
+      await apiFetch(`${API_BASE}/api/gamification/admin/level-thresholds`, { method: "PUT",body: JSON.stringify({ level_number: editLevel.level_number, min_points: parseInt(editLevelForm.min_points), max_points: editLevelForm.max_points ? parseInt(editLevelForm.max_points) : null, title: editLevelForm.title }) });
+      setEditLevel(null); await fetchLevels(); showToast("Level updated!");
+    } catch (err) { showToast(err.message, "error"); }
   };
 
-  // ── Pagination ────────────────────────────────────────────
+  const openEditLevel = (l) => { setEditLevel(l); setEditLevelForm({ min_points: String(l.min_points), max_points: String(l.max_points || ""), title: l.title || "" }); };
+
+  // ── Challenge handlers ────────────────────────────────────
+  const handleAddChallenge = async () => {
+    if (!addChallengeForm.challenge_code || !addChallengeForm.title) return showToast("Code and title required", "error");
+    try {
+      await apiFetch(`${API_BASE}/api/gamification/admin/challenges`, { method: "POST", body: JSON.stringify({ ...addChallengeForm, target_count: parseInt(addChallengeForm.target_count), reward_points: parseInt(addChallengeForm.reward_points), expiry_days: parseInt(addChallengeForm.expiry_days) }) });
+      setShowAddChallenge(false);
+      setAddChallengeForm({ challenge_code: "", title: "", description: "", target_count: "1", reward_points: "50", expiry_days: "7", challenge_type: "daily", action_required: "" });
+      await fetchChallenges(); showToast("Challenge added!");
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const handleEditChallenge = async () => {
+    try {
+      await apiFetch(`${API_BASE}/api/gamification/admin/challenges/${editChallenge.id}`, { method: "PUT", body: JSON.stringify({ title: editChallengeForm.title, description: editChallengeForm.description, target_count: parseInt(editChallengeForm.target_count), reward_points: parseInt(editChallengeForm.reward_points), expiry_days: parseInt(editChallengeForm.expiry_days), is_active: editChallengeForm.is_active }) });
+      setEditChallenge(null); await fetchChallenges(); showToast("Challenge updated!");
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const handleDeleteChallenge = async (id) => {
+    try {
+      await apiFetch(`${API_BASE}/api/gamification/admin/challenges/${id}`, { method: "DELETE" });
+      await fetchChallenges(); showToast("Challenge deleted.");
+    } catch (err) { showToast(err.message, "error"); }
+  };
+
+  const openEditChallenge = (c) => { setEditChallenge(c); setEditChallengeForm({ title: c.title, description: c.description || "", target_count: String(c.target_count), reward_points: String(c.reward_points), expiry_days: String(c.expiry_days), is_active: c.is_active }); };
+
+  // ── Badge pagination ──────────────────────────────────────
   const displayBadges   = adminView ? allBadges : allBadges.filter(b => b.is_active);
   const totalBadgePages = Math.max(1, Math.ceil(displayBadges.length / badgesPerPage));
   const visibleBadges   = displayBadges.slice((badgePage - 1) * badgesPerPage, badgePage * badgesPerPage);
+
+  // ── Challenge filtering + pagination ──────────────────────
+  const filteredChallenges = filterType === "all" ? challenges : challenges.filter(c => c.challenge_type === filterType);
+  const totalChallengePages = Math.max(1, Math.ceil(filteredChallenges.length / challengesPerPage));
+  const visibleChallenges   = filteredChallenges.slice((challengePage - 1) * challengesPerPage, challengePage * challengesPerPage);
+
+  const TABS = [
+    { key: "badges",     label: "🏅 Badges",     count: allBadges.filter(b => b.is_active).length },
+    { key: "levels",     label: "📈 Levels",     count: levels.length },
+    { key: "challenges", label: "🎯 Challenges", count: challenges.filter(c => c.is_active).length },
+  ];
+
+  const CHALLENGE_TYPE_OPTIONS = [
+    { value: "daily",      label: "Daily" },
+    { value: "weekly",     label: "Weekly" },
+    { value: "monthly",    label: "Monthly" },
+    { value: "onboarding", label: "Onboarding" },
+  ];
 
   return (
     <>
@@ -477,7 +574,7 @@ export default function AchievementsPage() {
         @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${C.pageBg}; font-family: 'Inter', sans-serif; }
-        a { text-decoration: none; } button { cursor: pointer; } input:focus, textarea:focus { outline: none; }
+        a { text-decoration: none; } button { cursor: pointer; } input:focus, textarea:focus, select:focus { outline: none; }
         @keyframes fadeUp    { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
         @keyframes fadeIn    { from { opacity:0; } to { opacity:1; } }
         @keyframes spin      { to { transform: rotate(360deg); } }
@@ -493,34 +590,82 @@ export default function AchievementsPage() {
         </div>
       )}
 
-      {/* Add Modal */}
-      {showAddModal && (
-        <Modal title="Add New Badge" onClose={() => setShowAddModal(false)}>
-          <Field label="Badge Code *" value={addForm.badge_code} onChange={v => setAddForm(f => ({ ...f, badge_code: v.toUpperCase() }))} placeholder="e.g. SPEED_DEMON" hint="Unique uppercase identifier — cannot be changed later" />
-          <Field label="Name *" value={addForm.name} onChange={v => setAddForm(f => ({ ...f, name: v }))} placeholder="e.g. Speed Demon" />
-          <Field label="Description" value={addForm.description} onChange={v => setAddForm(f => ({ ...f, description: v }))} type="textarea" placeholder="What does this badge reward?" />
-          <Field label="Category" value={addForm.category} onChange={v => setAddForm(f => ({ ...f, category: v }))} placeholder="milestone / activity / points / reputation / challenges" />
-          <Field label="Points Awarded" value={addForm.points_awarded} onChange={v => setAddForm(f => ({ ...f, points_awarded: v }))} type="number" placeholder="50" />
+      {/* ── BADGE MODALS ── */}
+      {showAddBadge && (
+        <Modal title="Add New Badge" onClose={() => setShowAddBadge(false)}>
+          <Field label="Badge Code *" value={addBadgeForm.badge_code} onChange={v => setAddBadgeForm(f => ({ ...f, badge_code: v.toUpperCase() }))} placeholder="e.g. SPEED_DEMON" hint="Unique uppercase identifier — cannot change later" />
+          <Field label="Name *" value={addBadgeForm.name} onChange={v => setAddBadgeForm(f => ({ ...f, name: v }))} placeholder="e.g. Speed Demon" />
+          <Field label="Description" value={addBadgeForm.description} onChange={v => setAddBadgeForm(f => ({ ...f, description: v }))} type="textarea" placeholder="What does this badge reward?" />
+          <Field label="Category" value={addBadgeForm.category} onChange={v => setAddBadgeForm(f => ({ ...f, category: v }))} placeholder="milestone / activity / points / reputation / challenges" />
+          <Field label="Points Awarded" value={addBadgeForm.points_awarded} onChange={v => setAddBadgeForm(f => ({ ...f, points_awarded: v }))} type="number" />
           <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
-            <button onClick={() => setShowAddModal(false)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
+            <button onClick={() => setShowAddBadge(false)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
             <button onClick={handleAddBadge} style={{ flex: 2, padding: "12px 0", borderRadius: 8, border: "none", background: C.primary, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff" }}>Add Badge</button>
           </div>
         </Modal>
       )}
-
-      {/* Edit Modal */}
       {editBadge && (
-        <Modal title={`Edit — ${editBadge.name}`} onClose={() => setEditBadge(null)}>
-          <Field label="Badge Code" value={editBadge.badge_code} onChange={() => {}} disabled hint="Cannot be changed after creation" />
-          <Field label="Description" value={editForm.description} onChange={v => setEditForm(f => ({ ...f, description: v }))} type="textarea" />
-          <Field label="Points Awarded" value={editForm.points_awarded} onChange={v => setEditForm(f => ({ ...f, points_awarded: v }))} type="number" />
+        <Modal title={`Edit Badge — ${editBadge.name}`} onClose={() => setEditBadge(null)}>
+          <Field label="Badge Code" value={editBadge.badge_code} onChange={() => {}} disabled hint="Cannot be changed" />
+          <Field label="Description" value={editBadgeForm.description} onChange={v => setEditBadgeForm(f => ({ ...f, description: v }))} type="textarea" />
+          <Field label="Points Awarded" value={editBadgeForm.points_awarded} onChange={v => setEditBadgeForm(f => ({ ...f, points_awarded: v }))} type="number" />
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
-            <input type="checkbox" id="is_active" checked={editForm.is_active} onChange={e => setEditForm(f => ({ ...f, is_active: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
-            <label htmlFor="is_active" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary, cursor: "pointer" }}>Badge is Active</label>
+            <input type="checkbox" id="badge_active" checked={editBadgeForm.is_active} onChange={e => setEditBadgeForm(f => ({ ...f, is_active: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
+            <label htmlFor="badge_active" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary, cursor: "pointer" }}>Badge is Active</label>
           </div>
           <div style={{ display: "flex", gap: 12 }}>
             <button onClick={() => setEditBadge(null)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
             <button onClick={handleEditBadge} style={{ flex: 2, padding: "12px 0", borderRadius: 8, border: "none", background: C.primary, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff" }}>Save Changes</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── LEVEL MODAL ── */}
+      {editLevel && (
+        <Modal title={`Edit Level ${editLevel.level_number}`} onClose={() => setEditLevel(null)}>
+          <Field label="Level Number" value={String(editLevel.level_number)} onChange={() => {}} disabled hint="Cannot be changed" />
+          <Field label="Title" value={editLevelForm.title} onChange={v => setEditLevelForm(f => ({ ...f, title: v }))} placeholder="e.g. Intermediate" />
+          <Field label="Minimum XP Required" value={editLevelForm.min_points} onChange={v => setEditLevelForm(f => ({ ...f, min_points: v }))} type="number" hint="Level 1 must remain 0" />
+          <Field label="Maximum XP (optional)" value={editLevelForm.max_points} onChange={v => setEditLevelForm(f => ({ ...f, max_points: v }))} type="number" hint="Leave empty for no upper limit (last level)" />
+          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+            <button onClick={() => setEditLevel(null)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
+            <button onClick={handleEditLevel} style={{ flex: 2, padding: "12px 0", borderRadius: 8, border: "none", background: C.primary, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff" }}>Save Changes</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── CHALLENGE MODALS ── */}
+      {showAddChallenge && (
+        <Modal title="Add New Challenge" onClose={() => setShowAddChallenge(false)}>
+          <Field label="Challenge Code *" value={addChallengeForm.challenge_code} onChange={v => setAddChallengeForm(f => ({ ...f, challenge_code: v.toUpperCase() }))} placeholder="e.g. DAILY_06" hint="Unique uppercase identifier" />
+          <Field label="Title *" value={addChallengeForm.title} onChange={v => setAddChallengeForm(f => ({ ...f, title: v }))} placeholder="e.g. Send 3 messages" />
+          <Field label="Description" value={addChallengeForm.description} onChange={v => setAddChallengeForm(f => ({ ...f, description: v }))} type="textarea" placeholder="What does the user need to do?" />
+          <Field label="Challenge Type" value={addChallengeForm.challenge_type} onChange={v => setAddChallengeForm(f => ({ ...f, challenge_type: v }))} options={CHALLENGE_TYPE_OPTIONS} />
+          <Field label="Action Required" value={addChallengeForm.action_required} onChange={v => setAddChallengeForm(f => ({ ...f, action_required: v }))} placeholder="e.g. message_sent" hint="Backend action type that triggers progress" />
+          <Field label="Target Count" value={addChallengeForm.target_count} onChange={v => setAddChallengeForm(f => ({ ...f, target_count: v }))} type="number" />
+          <Field label="Reward Points" value={addChallengeForm.reward_points} onChange={v => setAddChallengeForm(f => ({ ...f, reward_points: v }))} type="number" />
+          <Field label="Expiry Days" value={addChallengeForm.expiry_days} onChange={v => setAddChallengeForm(f => ({ ...f, expiry_days: v }))} type="number" hint="1 = daily, 7 = weekly, 30 = monthly" />
+          <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+            <button onClick={() => setShowAddChallenge(false)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
+            <button onClick={handleAddChallenge} style={{ flex: 2, padding: "12px 0", borderRadius: 8, border: "none", background: C.primary, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff" }}>Add Challenge</button>
+          </div>
+        </Modal>
+      )}
+      {editChallenge && (
+        <Modal title={`Edit Challenge — ${editChallenge.title}`} onClose={() => setEditChallenge(null)}>
+          <Field label="Challenge Code" value={editChallenge.challenge_code} onChange={() => {}} disabled hint="Cannot be changed" />
+          <Field label="Title" value={editChallengeForm.title} onChange={v => setEditChallengeForm(f => ({ ...f, title: v }))} />
+          <Field label="Description" value={editChallengeForm.description} onChange={v => setEditChallengeForm(f => ({ ...f, description: v }))} type="textarea" />
+          <Field label="Target Count" value={editChallengeForm.target_count} onChange={v => setEditChallengeForm(f => ({ ...f, target_count: v }))} type="number" />
+          <Field label="Reward Points" value={editChallengeForm.reward_points} onChange={v => setEditChallengeForm(f => ({ ...f, reward_points: v }))} type="number" />
+          <Field label="Expiry Days" value={editChallengeForm.expiry_days} onChange={v => setEditChallengeForm(f => ({ ...f, expiry_days: v }))} type="number" />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <input type="checkbox" id="ch_active" checked={editChallengeForm.is_active} onChange={e => setEditChallengeForm(f => ({ ...f, is_active: e.target.checked }))} style={{ width: 16, height: 16, cursor: "pointer" }} />
+            <label htmlFor="ch_active" style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary, cursor: "pointer" }}>Challenge is Active</label>
+          </div>
+          <div style={{ display: "flex", gap: 12 }}>
+            <button onClick={() => setEditChallenge(null)} style={{ flex: 1, padding: "12px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: C.textPrimary }}>Cancel</button>
+            <button onClick={handleEditChallenge} style={{ flex: 2, padding: "12px 0", borderRadius: 8, border: "none", background: C.primary, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 14, color: "#fff" }}>Save Changes</button>
           </div>
         </Modal>
       )}
@@ -533,22 +678,28 @@ export default function AchievementsPage() {
           <div style={{ padding: "24px 32px", maxWidth: 1380 }}>
             <div style={{ border: `1px solid ${C.frameBorder}`, borderRadius: 20, padding: "24px 28px", background: C.surfaceCard, animation: "fadeUp 0.35s ease both", minHeight: 850 }}>
 
-              {/* Header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+              {/* ── Page Header ── */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
                 <h1 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 32, color: "#121417" }}>Achievements</h1>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <button onClick={fetchAll} disabled={loading} title="Refresh" style={{ width: 40, height: 40, borderRadius: 8, background: C.surfaceLow, border: `1px solid ${C.outline}`, color: C.textMuted, fontSize: 16, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {/* Refresh */}
+                  <button onClick={fetchAll} disabled={loading} title="Refresh all" style={{ width: 40, height: 40, borderRadius: 8, background: C.surfaceLow, border: `1px solid ${C.outline}`, color: C.textMuted, fontSize: 16, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {loading ? <div style={{ width: 14, height: 14, border: `2px solid ${C.outline}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> : "↻"}
                   </button>
-                  {IS_ADMIN && (
+
+                  {/* Admin toggle — only for badges tab */}
+                  {IS_ADMIN && activeTab === "badges" && (
                     <button onClick={() => { setAdminView(p => !p); setBadgePage(1); }} style={{ height: 40, padding: "0 20px", borderRadius: 8, border: `1px solid ${adminView ? C.primary : C.outline}`, background: adminView ? C.primary : C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 13, color: adminView ? "#fff" : C.textPrimary, cursor: "pointer", transition: "all 0.15s" }}>
                       {adminView ? "👁 View Mode" : "⚙ Manage Badges"}
                     </button>
                   )}
-                  {IS_ADMIN && adminView && (
-                    <button onClick={() => setShowAddModal(true)} style={{ height: 40, padding: "0 20px", borderRadius: 8, border: "none", background: C.tealOnLight, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#fff", cursor: "pointer" }}>
-                      + Add Badge
-                    </button>
+
+                  {/* Add buttons */}
+                  {IS_ADMIN && activeTab === "badges" && adminView && (
+                    <button onClick={() => setShowAddBadge(true)} style={{ height: 40, padding: "0 20px", borderRadius: 8, border: "none", background: C.tealOnLight, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#fff", cursor: "pointer" }}>+ Add Badge</button>
+                  )}
+                  {IS_ADMIN && activeTab === "challenges" && (
+                    <button onClick={() => setShowAddChallenge(true)} style={{ height: 40, padding: "0 20px", borderRadius: 8, border: "none", background: C.tealOnLight, fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 13, color: "#fff", cursor: "pointer" }}>+ Add Challenge</button>
                   )}
                 </div>
               </div>
@@ -561,70 +712,114 @@ export default function AchievementsPage() {
                 </div>
               )}
 
-              {/* Admin banner */}
-              {adminView && (
-                <div style={{ padding: "10px 16px", background: "#e8f4fd", border: "1px solid #90caf9", borderRadius: 8, marginBottom: 16, fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#0d47a1" }}>
-                  ⚙ <strong>Admin Mode</strong> — Add, edit, or deactivate badge definitions. Inactive badges are hidden from users but badge earning logic is preserved.
+              {/* ── TABS ── */}
+              <div style={{ display: "flex", gap: 4, marginBottom: 24, borderBottom: `2px solid ${C.outline}33`, paddingBottom: 0 }}>
+                {TABS.map(tab => (
+                  <button key={tab.key} onClick={() => { setActiveTab(tab.key); setAdminView(false); }} style={{
+                    padding: "10px 20px", borderRadius: "8px 8px 0 0",
+                    border: "none",
+                    borderBottom: activeTab === tab.key ? `2px solid ${C.primary}` : "2px solid transparent",
+                    background: activeTab === tab.key ? C.surfaceHigh : "transparent",
+                    fontFamily: "'Inter', sans-serif", fontWeight: activeTab === tab.key ? 700 : 500,
+                    fontSize: 14, color: activeTab === tab.key ? C.primary : C.textMuted,
+                    cursor: "pointer", transition: "all 0.15s",
+                    display: "flex", alignItems: "center", gap: 8,
+                  }}>
+                    {tab.label}
+                    <span style={{ background: activeTab === tab.key ? C.primary : C.outline, color: "#fff", fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 9999 }}>{tab.count}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* ══ BADGES TAB ══ */}
+              {activeTab === "badges" && (
+                <div style={{ animation: "fadeIn 0.2s ease" }}>
+                  {adminView && (
+                    <div style={{ padding: "10px 16px", background: "#e8f4fd", border: "1px solid #90caf9", borderRadius: 8, marginBottom: 16, fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#0d47a1" }}>
+                      ⚙ <strong>Admin Mode</strong> — Add, edit, or deactivate badge definitions.
+                    </div>
+                  )}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: C.textMuted }}>
+                      {adminView ? `${allBadges.length} total · ${allBadges.filter(b => !b.is_active).length} inactive` : `${allBadges.filter(b => b.is_active).length} active badges`}
+                    </span>
+                    <Pagination current={badgePage} total={totalBadgePages} onChange={setBadgePage} />
+                  </div>
+                  {loading && <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}><div style={{ width: 20, height: 20, border: `3px solid ${C.surfaceContainer}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Loading badges...</div>}
+                  <div style={{ display: "flex", gap: 24, flexWrap: "nowrap", overflowX: "auto", paddingBottom: 8, minHeight: 360, alignItems: "flex-start" }}>
+                    {!loading && visibleBadges.length === 0
+                      ? <div style={{ padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}>No badges found.</div>
+                      : !loading && visibleBadges.map(badge =>
+                          adminView
+                            ? <BadgeManageCard key={badge.badge_code} badge={badge} onEdit={openEditBadge} onDelete={handleDeleteBadge} />
+                            : <BadgeCard key={badge.badge_code} badge={badge} />
+                        )
+                    }
+                  </div>
                 </div>
               )}
 
-              {/* Levels */}
-              <div style={{ marginBottom: 0 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 16, color: "#121417" }}>Levels</span>
-                  <PaginationDots total={LEVEL_DEFS.length} current={levelDot} />
-                </div>
-                <div ref={levelScrollRef} style={{ overflowX: "auto", overflowY: "hidden", height: 140, display: "flex", gap: 20, paddingBottom: 8, scrollBehavior: "smooth" }}
-                  onScroll={e => { const el = e.target; setLevelDot(Math.round(el.scrollLeft / (el.scrollWidth - el.clientWidth || 1) * (LEVEL_DEFS.length - 1))); }}
-                >
-                  {LEVEL_DEFS.map(def => <LevelCard key={def.level} def={def} isCurrentLevel={def.level === userLevel} userPoints={userPoints} />)}
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div style={{ width: "100%", height: 1, background: "#000", margin: "20px 0" }} />
-
-              {/* Badges */}
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 16, color: "#121417" }}>
-                      {adminView ? "Badge Management" : "Badges"}
-                    </span>
-                    {adminView && (
-                      <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>
-                        {allBadges.filter(b => b.is_active).length} active · {allBadges.filter(b => !b.is_active).length} inactive
-                      </span>
-                    )}
-                  </div>
-                  <Pagination current={badgePage} total={totalBadgePages} onChange={setBadgePage} />
-                </div>
-
-                {loading && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}>
-                    <div style={{ width: 20, height: 20, border: `3px solid ${C.surfaceContainer}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    Loading badges...
-                  </div>
-                )}
-
-                <div style={{ display: "flex", gap: 24, flexWrap: "nowrap", overflowX: "auto", paddingBottom: 8, minHeight: 360, animation: "fadeIn 0.3s ease both", alignItems: "flex-start" }}>
-                  {!loading && visibleBadges.length === 0 ? (
-                    <div style={{ padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}>No badges found.</div>
-                  ) : !loading && visibleBadges.map(badge =>
-                    adminView
-                      ? <BadgeManageCard key={badge.badge_code} badge={badge} onEdit={openEdit} onDelete={handleDeleteBadge} />
-                      : <BadgeCard key={badge.badge_code} badge={badge} />
+              {/* ══ LEVELS TAB ══ */}
+              {activeTab === "levels" && (
+                <div style={{ animation: "fadeIn 0.2s ease" }}>
+                  {IS_ADMIN && (
+                    <div style={{ padding: "10px 16px", background: "#e8f4fd", border: "1px solid #90caf9", borderRadius: 8, marginBottom: 16, fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#0d47a1" }}>
+                      ⚙ <strong>Admin</strong> — Click ✏️ Edit on any level to update its XP threshold or title.
+                    </div>
                   )}
+                  {loading && <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}><div style={{ width: 20, height: 20, border: `3px solid ${C.surfaceContainer}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Loading levels...</div>}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {!loading && levels.length === 0 && (
+                      <div style={{ padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}>No levels found. Make sure level definitions are seeded.</div>
+                    )}
+                    {!loading && levels.map(level => (
+                      <div key={level.level_number} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <div style={{ flex: 1 }}><LevelRow level={level} /></div>
+                        {IS_ADMIN && (
+                          <button onClick={() => openEditLevel(level)} style={{ padding: "8px 16px", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.primary, cursor: "pointer", flexShrink: 0 }}
+                            onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
+                            onMouseLeave={e => e.currentTarget.style.background = C.surfaceLow}
+                          >✏️ Edit</button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              )}
 
-                {/* Footer */}
-                <div style={{ marginTop: 16, fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>
-                  {adminView
-                    ? `${allBadges.length} total badge definitions in system · Earned badge display is handled by Module 1 (Profile)`
-                    : `${allBadges.filter(b => b.is_active).length} active badges · Earned state shown on user profile (Module 1)`
-                  }
+              {/* ══ CHALLENGES TAB ══ */}
+              {activeTab === "challenges" && (
+                <div style={{ animation: "fadeIn 0.2s ease" }}>
+                  {/* Filter bar */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {["all", "daily", "weekly", "monthly", "onboarding"].map(type => {
+                        const cs = getChallengeStyle(type);
+                        return (
+                          <button key={type} onClick={() => { setFilterType(type); setChallengePage(1); }} style={{ padding: "6px 14px", borderRadius: 20, border: `1px solid ${filterType === type ? C.primary : C.outline}`, background: filterType === type ? C.primary : "transparent", fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: filterType === type ? "#fff" : C.textMuted, cursor: "pointer", textTransform: "capitalize", transition: "all 0.15s" }}>
+                            {type === "all" ? "All" : `${cs.icon} ${type.charAt(0).toUpperCase() + type.slice(1)}`}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 13, color: C.textMuted }}>{filteredChallenges.length} challenges</span>
+                      <Pagination current={challengePage} total={totalChallengePages} onChange={setChallengePage} />
+                    </div>
+                  </div>
+
+                  {loading && <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}><div style={{ width: 20, height: 20, border: `3px solid ${C.surfaceContainer}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />Loading challenges...</div>}
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {!loading && visibleChallenges.length === 0
+                      ? <div style={{ padding: "40px 0", color: C.textMuted, fontFamily: "'Inter', sans-serif", fontSize: 14 }}>No challenges found for this filter.</div>
+                      : !loading && visibleChallenges.map(ch => (
+                          <ChallengeRow key={ch.id} challenge={ch} onEdit={openEditChallenge} onDelete={handleDeleteChallenge} />
+                        ))
+                    }
+                  </div>
                 </div>
-              </div>
+              )}
 
             </div>
           </div>
