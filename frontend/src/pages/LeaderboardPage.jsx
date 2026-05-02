@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 // =============================================================
 
 const API_BASE = "";
-const CURRENT_USER_ID = "u001";
+const CURRENT_USER_ID = "1";
 
 const C = {
   // ── Navbar — deep midnight (matches screenshot top bar) ──────

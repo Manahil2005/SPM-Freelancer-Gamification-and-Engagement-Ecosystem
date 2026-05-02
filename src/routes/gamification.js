@@ -6,10 +6,14 @@
 const express = require("express");
 const router  = express.Router();
 const {
-    handleAwardPoints,
+     handleAwardPoints,
     handleGetUserBadges,
     handleGetUserProfile,
-    handleGetAuditLogs
+    handleGetOnboarding,
+    handleCompleteOnboardingStep, 
+    handleGetAuditLogs,
+    handleGetOnboardingProgress,   
+    handleSelectRole     
 } = require("../controllers/gamificationController");
 const { requireUserId, requireAdmin } = require("../middleware/auth");
 
@@ -40,5 +44,21 @@ router.get("/user/:userId/profile", requireUserId, handleGetUserProfile);
 // GET /api/gamification/user/:userId/badges
 // ============================================================
 router.get("/user/:userId/badges", requireUserId, handleGetUserBadges);
+
+
+
+
+// ============================================================
+// ONBOARDING ENDPOINTS - 
+// ============================================================
+
+// POST /api/gamification/onboarding/complete-step
+router.post("/onboarding/complete-step", requireUserId, handleCompleteOnboardingStep);
+
+// GET /api/gamification/onboarding/:userId/progress
+router.get("/onboarding/:userId/progress", requireUserId, handleGetOnboardingProgress);
+
+// POST /api/gamification/onboarding/select-role
+router.post("/onboarding/select-role", requireUserId, handleSelectRole);
 
 module.exports = router;

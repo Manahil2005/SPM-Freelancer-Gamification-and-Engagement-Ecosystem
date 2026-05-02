@@ -1758,3 +1758,5 @@ CREATE TRIGGER trigger_update_ratings
 AFTER INSERT OR UPDATE ON reviews
 FOR EACH ROW EXECUTE FUNCTION update_profile_ratings();
 */
+
+

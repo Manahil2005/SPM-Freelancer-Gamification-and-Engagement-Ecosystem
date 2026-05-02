@@ -107,33 +107,198 @@ const handleGetOnboarding = async (req, res) => {
 };
 
 // POST /api/gamification/user/:userId/onboarding/:stepCode
+
+// Add these functions to your gamificationController.js file
+
+// ============================================================
+// ONBOARDING HANDLERS - Add these functions
+// ============================================================
+
 const handleCompleteOnboardingStep = async (req, res) => {
     try {
-        const userId   = parseInt(req.params.userId);
-        const stepCode = String(req.params.stepCode || "").trim().toUpperCase();
-
-        if (isNaN(userId) || !stepCode) {
-            return res.status(400).json({ success: false, message: "Invalid userId or stepCode" });
+        const userId = req.userId; // From auth middleware
+        const { stepCode, stepData } = req.body;
+        
+        console.log(`Processing onboarding step: ${stepCode} for user: ${userId}`);
+        
+        // Validate step
+        const validSteps = ['INTRO', 'ABOUT', 'ROLE', 'MODULES', 'BADGE', 'DONE'];
+        if (!validSteps.includes(stepCode)) {
+            return res.status(400).json({ success: false, message: "Invalid step code" });
         }
-
-        const result = await gService.completeOnboardingStep(userId, stepCode);
-
-        if (result.alreadyCompleted) {
-            return res.status(200).json({
-                success: true,
-                message: "Step already completed",
-                data:    result
-            });
-        }
-
-        // Evaluate badges after onboarding step
-        gService.evaluateBadges(userId).catch(err =>
-            console.error("[Badge Engine] Evaluation failed for user", userId, err.message)
+        
+        // Check if user exists in gamification table
+        const userCheck = await db.query(
+            `SELECT user_id FROM gamification_user_progress WHERE user_id = $1`,
+            [userId]
         );
-
-        res.status(200).json({ success: true, data: result });
+        
+        if (userCheck.rows.length === 0) {
+            console.log(`Initializing gamification progress for user: ${userId}`);
+            // Initialize user progress
+            await db.query(
+                `INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+                 VALUES ($1, $2, $3, $4)`,
+                [userId, 0, 1, 0]
+            );
+        }
+        
+        // Award points based on step
+        let pointsAwarded = 0;
+        switch(stepCode) {
+            case 'ABOUT':
+                pointsAwarded = 50;
+                break;
+            case 'ROLE':
+                pointsAwarded = 100;
+                // Store selected role if provided
+                if (stepData && stepData.role) {
+                    await db.query(
+                        `UPDATE users SET role = $1::user_role WHERE id = $2`,
+                        [stepData.role, userId]
+                    ).catch(err => console.log('Role update error:', err.message));
+                }
+                break;
+            case 'MODULES':
+                pointsAwarded = (stepData && stepData.moduleCount) ? stepData.moduleCount * 10 : 0;
+                // Add bonus for 5+ modules
+                if (stepData && stepData.hasExplorerBonus) {
+                    pointsAwarded += 50;
+                }
+                break;
+            case 'BADGE':
+                pointsAwarded = 250;
+                break;
+        }
+        
+        // Award points if any
+        if (pointsAwarded > 0) {
+            await db.query(
+                `UPDATE gamification_user_progress 
+                 SET total_points = total_points + $1,
+                     activity_count = activity_count + 1,
+                     updated_at = NOW()
+                 WHERE user_id = $2`,
+                [pointsAwarded, userId]
+            );
+            
+            // Log in points ledger
+            await db.query(
+                `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+                 VALUES ($1, $2, $3, $4)`,
+                [userId, `onboarding_${stepCode.toLowerCase()}`, pointsAwarded, `Completed onboarding step: ${stepCode}`]
+            );
+            
+            console.log(`Awarded ${pointsAwarded} points for step: ${stepCode}`);
+        }
+        
+        res.status(200).json({ 
+            success: true, 
+            data: { 
+                stepCompleted: stepCode, 
+                pointsAwarded,
+                totalPoints: pointsAwarded 
+            } 
+        });
+        
     } catch (error) {
-        res.status(400).json({ success: false, message: error.message });
+        console.error('Onboarding step error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const handleGetOnboardingProgress = async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid userId" });
+        }
+        
+        // Get user's gamification progress
+        const progress = await db.query(
+            `SELECT total_points, current_level, activity_count, trust_score
+             FROM gamification_user_progress 
+             WHERE user_id = $1`,
+            [userId]
+        );
+        
+        // Get user's badges
+        const badges = await db.query(
+            `SELECT gb.badge_code, gb.name, gb.points_awarded, gub.unlocked_at
+             FROM gamification_user_badges gub
+             JOIN gamification_badges gb ON gb.id = gub.badge_id
+             WHERE gub.user_id = $1
+             ORDER BY gub.unlocked_at DESC
+             LIMIT 5`,
+            [userId]
+        );
+        
+        res.status(200).json({
+            success: true,
+            data: {
+                totalPoints: progress.rows[0]?.total_points || 0,
+                level: progress.rows[0]?.current_level || 1,
+                activityCount: progress.rows[0]?.activity_count || 0,
+                trustScore: progress.rows[0]?.trust_score || 0,
+                badges: badges.rows
+            }
+        });
+        
+    } catch (error) {
+        console.error('Get onboarding progress error:', error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+const handleSelectRole = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const { role } = req.body;
+        
+        console.log(`Selecting role ${role} for user ${userId}`);
+        
+        // Validate role
+        const validRoles = ['freelancer', 'client', 'admin'];
+        if (!validRoles.includes(role)) {
+            return res.status(400).json({ success: false, message: "Invalid role" });
+        }
+        
+        // Update user role in users table
+        const result = await db.query(
+            `UPDATE users SET role = $1::user_role WHERE id = $2 RETURNING id`,
+            [role, userId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        
+        // Award points for role selection
+        await db.query(
+            `UPDATE gamification_user_progress 
+             SET total_points = total_points + 100,
+                 activity_count = activity_count + 1
+             WHERE user_id = $1`,
+            [userId]
+        );
+        
+        // Log in points ledger
+        await db.query(
+            `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+             VALUES ($1, $2, $3, $4)`,
+            [userId, 'role_selection', 100, `Selected role: ${role}`]
+        );
+        
+        res.status(200).json({
+            success: true,
+            message: `Role set to ${role}`,
+            pointsAwarded: 100
+        });
+        
+    } catch (error) {
+        console.error('Role selection error:', error);
+        res.status(500).json({ success: false, message: error.message });
     }
 };
 
@@ -162,5 +327,7 @@ module.exports = {
     handleGetUserProfile,
     handleGetOnboarding,
     handleCompleteOnboardingStep,
-    handleGetAuditLogs
+    handleGetAuditLogs,
+    handleGetOnboardingProgress,   
+    handleSelectRole    
 };

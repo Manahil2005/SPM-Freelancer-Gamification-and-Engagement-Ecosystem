@@ -4,18 +4,18 @@ import { useState, useEffect, useRef } from "react";
 // AchievementsPage.jsx — Module 11
 //
 // Scope:
-//   ✅ Levels section — shows user's current level (our data)
-//   ✅ Badge definitions — shows all badges that exist in system
+//   ✅ Levels section — static, informational (no user data needed)
+//   ✅ Badge definitions — all active badges from DB
 //   ✅ Admin: Add / Edit / Deactivate badges
-//   ❌ Earned/Locked badge state — handled by other module (Module 1)
-//   ❌ "My Achievements" — handled by other module (Module 1)
+//   ❌ Current level highlight — belongs to Module 1 (user profile)
+//   ❌ Earned/Locked badge state — belongs to Module 1
+//   ❌ "My Achievements" — belongs to Module 1
 //
 // APIs used:
-//   GET  /api/gamification/user/:id/profile   → level + points
-//   GET  /api/gamification/admin/badges        → all badge definitions
-//   POST /api/gamification/admin/badges        → add badge
-//   PATCH /api/gamification/admin/badges/:code → edit badge
-//   DELETE /api/gamification/admin/badges/:code → deactivate badge
+//   GET  /api/gamification/admin/badges         → all badge definitions
+//   POST /api/gamification/admin/badges         → add badge (admin)
+//   PATCH /api/gamification/admin/badges/:code  → edit badge (admin)
+//   DELETE /api/gamification/admin/badges/:code → deactivate badge (admin)
 // =============================================================
 
 const API_BASE        = "";
@@ -60,7 +60,8 @@ const C = {
   paginationText:   "#00132E",
 };
 
-// ── Level definitions ─────────────────────────────────────────
+// ── Static level definitions — purely informational ───────────
+// No "Current" highlight — that belongs on user profile (Module 1)
 const LEVEL_DEFS = [
   { level: 1, title: "Beginner",     xp_required: 0,    icon: "🌱", color: "#007a6e", desc: "Starting your journey on the platform" },
   { level: 2, title: "Intermediate", xp_required: 1000, icon: "⚡", color: "#001736", desc: "Building momentum and gaining experience" },
@@ -187,22 +188,48 @@ function Field({ label, value, onChange, type = "text", placeholder = "", disabl
   );
 }
 
-// ── Badge Card (view mode — no earned state) ──────────────────
+// ── Level Card — static, no current highlight ─────────────────
+function LevelCard({ def }) {
+  return (
+    <div style={{ boxSizing: "border-box", width: 310, height: 126, flexShrink: 0, border: `1px solid rgba(0,0,0,0.12)`, borderRadius: 8, display: "flex", alignItems: "center", padding: "0 16px", gap: 16, background: C.surfaceCard, transition: "box-shadow 0.2s, border-color 0.2s" }}
+      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,23,54,0.08)"}
+      onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}
+    >
+      {/* Icon box */}
+      <div style={{ width: 70, height: 50, flexShrink: 0, background: `${def.color}18`, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, border: `1px solid ${def.color}33` }}>
+        {def.icon}
+      </div>
+      {/* Text */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: C.textPrimary }}>Level {def.level}</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: def.color }}>{def.title}</span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>
+          {def.xp_required === 0 ? "Starting level — all users begin here" : `${def.xp_required.toLocaleString()} XP required`}
+        </span>
+        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted, fontStyle: "italic" }}>{def.desc}</span>
+      </div>
+      {/* Level number badge */}
+      <div style={{ width: 32, height: 32, borderRadius: "50%", background: `${def.color}22`, border: `2px solid ${def.color}55`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Manrope', sans-serif", fontWeight: 800, fontSize: 14, color: def.color, flexShrink: 0 }}>
+        {def.level}
+      </div>
+    </div>
+  );
+}
+
+// ── Badge Card (view mode) ────────────────────────────────────
 function BadgeCard({ badge }) {
   const style = getBadgeStyle(badge.badge_code);
   const Logo  = BadgeLogo[(badge.badge_code || "").toLowerCase()];
   return (
-    <div style={{ boxSizing: "border-box", width: 271, height: 339, flexShrink: 0, border: `2px solid ${style.grad[0]}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: C.surfaceCard, boxShadow: `0 2px 12px ${style.grad[0]}33`, transition: "transform 0.2s, box-shadow 0.2s" }}
+    <div style={{ boxSizing: "border-box", width: 271, height: 339, flexShrink: 0, border: `2px solid ${style.grad[0]}`, borderRadius: 12, display: "flex", flexDirection: "column", overflow: "hidden", background: C.surfaceCard, boxShadow: `0 2px 12px ${style.grad[0]}22`, transition: "transform 0.2s, box-shadow 0.2s" }}
       onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-4px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(0,23,54,0.12)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = `0 2px 12px ${style.grad[0]}33`; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = `0 2px 12px ${style.grad[0]}22`; }}
     >
       {/* Media */}
       <div style={{ width: "100%", height: 188, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}cc, ${style.grad[1]}ee)`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
         {Logo ? <Logo size={90} /> : <span style={{ fontSize: 60 }}>{style.icon}</span>}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", background: "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.2) 0%, transparent 65%)" }} />
-        {/* Points pill */}
         <div style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "'Inter', sans-serif", padding: "2px 8px", borderRadius: 9999 }}>+{badge.points_awarded} pts</div>
-        {/* Category pill */}
         <div style={{ position: "absolute", top: 10, left: 10, background: C.teal, color: C.textOnTeal, fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase", letterSpacing: "0.05em" }}>{badge.category}</div>
       </div>
       {/* Text */}
@@ -227,16 +254,13 @@ function BadgeManageCard({ badge, onEdit, onDelete }) {
       onMouseEnter={e => e.currentTarget.style.transform = "translateY(-3px)"}
       onMouseLeave={e => e.currentTarget.style.transform = "translateY(0)"}
     >
-      {/* Media */}
-      <div style={{ width: "100%", height: 140, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}${badge.is_active ? "cc" : "55"}, ${style.grad[1]}${badge.is_active ? "ee" : "77"})`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: 140, flexShrink: 0, background: `linear-gradient(135deg, ${style.grad[0]}${badge.is_active ? "cc" : "55"}, ${style.grad[1]}${badge.is_active ? "ee" : "77"})`, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
         {Logo ? <Logo size={70} /> : <span style={{ fontSize: 48 }}>{style.icon}</span>}
-        {/* Status pills */}
         <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 4 }}>
           {!badge.is_active && <span style={{ background: C.error, color: "#fff", fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase" }}>Inactive</span>}
         </div>
         <div style={{ position: "absolute", top: 8, right: 8, background: "rgba(0,0,0,0.5)", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "'Inter', sans-serif", padding: "2px 8px", borderRadius: 9999 }}>+{badge.points_awarded}pts</div>
       </div>
-      {/* Text */}
       <div style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 15, color: C.textPrimary }}>{badge.name}</span>
         <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted, lineHeight: "18px" }}>{badge.description}</span>
@@ -245,7 +269,6 @@ function BadgeManageCard({ badge, onEdit, onDelete }) {
           <code style={{ background: C.surfaceLow, padding: "2px 6px", borderRadius: 4, fontSize: 10, color: C.textMuted }}>{badge.badge_code}</code>
         </div>
       </div>
-      {/* Actions */}
       <div style={{ padding: "0 14px 14px", display: "flex", gap: 8 }}>
         <button onClick={() => onEdit(badge)} style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: `1px solid ${C.outline}`, background: C.surfaceLow, fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 12, color: C.primary, cursor: "pointer" }}
           onMouseEnter={e => e.currentTarget.style.background = C.surfaceHigh}
@@ -325,30 +348,6 @@ function Sidebar() {
   );
 }
 
-function LevelCard({ def, isCurrentLevel, userPoints }) {
-  const unlocked = userPoints >= def.xp_required;
-  return (
-    <div style={{ boxSizing: "border-box", width: 310, height: 126, flexShrink: 0, border: `1px solid ${isCurrentLevel ? C.primary : "rgba(0,0,0,0.2)"}`, borderRadius: 8, display: "flex", alignItems: "center", padding: "0 16px", gap: 16, background: isCurrentLevel ? C.surfaceHigh : C.surfaceCard, transition: "box-shadow 0.2s", boxShadow: isCurrentLevel ? "0 2px 12px rgba(0,23,54,0.1)" : "none" }}
-      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,23,54,0.12)"}
-      onMouseLeave={e => e.currentTarget.style.boxShadow = isCurrentLevel ? "0 2px 12px rgba(0,23,54,0.1)" : "none"}
-    >
-      <div style={{ width: 70, height: 50, flexShrink: 0, background: unlocked ? `${def.color}22` : C.levelIconBg, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, border: isCurrentLevel ? `2px solid ${def.color}55` : "none" }}>
-        {unlocked ? def.icon : "🔒"}
-      </div>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 700, fontSize: 16, color: unlocked ? C.textPrimary : C.textMuted }}>Level {def.level}</span>
-          {isCurrentLevel && <span style={{ background: C.teal, color: C.textOnTeal, fontSize: 9, fontWeight: 800, fontFamily: "'Inter', sans-serif", padding: "2px 7px", borderRadius: 9999, textTransform: "uppercase" }}>Current</span>}
-        </div>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontWeight: 600, fontSize: 14, color: unlocked ? def.color : C.textMuted }}>{def.title}</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>{def.xp_required === 0 ? "Starting level" : `${def.xp_required.toLocaleString()} XP required`}</span>
-        <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 11, color: C.textMuted, fontStyle: "italic" }}>{def.desc}</span>
-      </div>
-      <div style={{ width: 10, height: 10, borderRadius: "50%", background: unlocked ? "#4caf50" : C.dotInactive, flexShrink: 0 }} />
-    </div>
-  );
-}
-
 function Pagination({ current, total, onChange }) {
   return (
     <div style={{ display: "flex", alignItems: "center", height: 31 }}>
@@ -375,19 +374,17 @@ function PaginationDots({ total, current }) {
 // MAIN PAGE
 // ═══════════════════════════════════════════════════════════════
 export default function AchievementsPage() {
-  const [userLevel,   setUserLevel]   = useState(1);
-  const [userPoints,  setUserPoints]  = useState(0);
-  const [allBadges,   setAllBadges]   = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [error,       setError]       = useState(null);
-  const [toast,       setToast]       = useState(null);
-  const [badgePage,   setBadgePage]   = useState(1);
-  const [levelDot,    setLevelDot]    = useState(0);
-  const [adminView,   setAdminView]   = useState(false);
+  const [allBadges,    setAllBadges]    = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
+  const [toast,        setToast]        = useState(null);
+  const [badgePage,    setBadgePage]    = useState(1);
+  const [levelDot,     setLevelDot]     = useState(0);
+  const [adminView,    setAdminView]    = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editBadge,   setEditBadge]   = useState(null);
-  const [addForm,     setAddForm]     = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
-  const [editForm,    setEditForm]    = useState({ description: "", points_awarded: "", is_active: true });
+  const [editBadge,    setEditBadge]    = useState(null);
+  const [addForm,      setAddForm]      = useState({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
+  const [editForm,     setEditForm]     = useState({ description: "", points_awarded: "", is_active: true });
 
   const badgesPerPage  = adminView ? 3 : 4;
   const levelScrollRef = useRef(null);
@@ -397,31 +394,21 @@ export default function AchievementsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Fetch ─────────────────────────────────────────────────
-  const fetchAll = async () => {
+  // ── Fetch badge definitions only — no user data needed ────
+  const fetchBadges = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Profile — for level display only
-      const profileData = await apiFetch(`${API_BASE}/api/gamification/user/${CURRENT_USER_ID}/profile`);
-      setUserLevel(profileData.data.current_level || 1);
-      setUserPoints(profileData.data.total_points  || 0);
-
-      // All badge definitions — no earned state needed
       const badgeData = await apiFetch(`${API_BASE}/api/gamification/admin/badges`);
       setAllBadges(badgeData.data || []);
     } catch (err) {
-      setError(`Could not load data: ${err.message}`);
+      setError(`Could not load badges: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    (async () => {
-      await fetchAll();
-    })();
-  }, []);
+  useEffect(() => { fetchBadges(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Add ───────────────────────────────────────────────────
   const handleAddBadge = async () => {
@@ -433,7 +420,7 @@ export default function AchievementsPage() {
       });
       setShowAddModal(false);
       setAddForm({ badge_code: "", name: "", description: "", category: "milestone", points_awarded: "50" });
-      await fetchAll();
+      await fetchBadges();
       showToast("Badge added successfully!");
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -447,7 +434,7 @@ export default function AchievementsPage() {
         body: JSON.stringify({ description: editForm.description, points_awarded: parseInt(editForm.points_awarded), is_active: editForm.is_active }),
       });
       setEditBadge(null);
-      await fetchAll();
+      await fetchBadges();
       showToast("Badge updated successfully!");
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -456,7 +443,7 @@ export default function AchievementsPage() {
   const handleDeleteBadge = async (badgeCode) => {
     try {
       await apiFetch(`${API_BASE}/api/gamification/admin/badges/${badgeCode}`, { method: "DELETE" });
-      await fetchAll();
+      await fetchBadges();
       showToast("Badge deactivated.");
     } catch (err) { showToast(err.message, "error"); }
   };
@@ -537,7 +524,7 @@ export default function AchievementsPage() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <h1 style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 32, color: "#121417" }}>Achievements</h1>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <button onClick={fetchAll} disabled={loading} title="Refresh" style={{ width: 40, height: 40, borderRadius: 8, background: C.surfaceLow, border: `1px solid ${C.outline}`, color: C.textMuted, fontSize: 16, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <button onClick={fetchBadges} disabled={loading} title="Refresh" style={{ width: 40, height: 40, borderRadius: 8, background: C.surfaceLow, border: `1px solid ${C.outline}`, color: C.textMuted, fontSize: 16, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {loading ? <div style={{ width: 14, height: 14, border: `2px solid ${C.outline}`, borderTopColor: C.obsidian, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} /> : "↻"}
                   </button>
                   {IS_ADMIN && (
@@ -557,34 +544,37 @@ export default function AchievementsPage() {
               {error && !loading && (
                 <div style={{ padding: "12px 16px", background: "#fff5f5", border: `1px solid ${C.error}33`, borderRadius: 8, color: C.error, fontFamily: "'Inter', sans-serif", fontSize: 13, marginBottom: 16, display: "flex", alignItems: "center", gap: 10 }}>
                   <span>⚠ {error}</span>
-                  <button onClick={fetchAll} style={{ marginLeft: "auto", background: C.error, color: "#fff", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
+                  <button onClick={fetchBadges} style={{ marginLeft: "auto", background: C.error, color: "#fff", border: "none", borderRadius: 6, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
                 </div>
               )}
 
               {/* Admin banner */}
               {adminView && (
                 <div style={{ padding: "10px 16px", background: "#e8f4fd", border: "1px solid #90caf9", borderRadius: 8, marginBottom: 16, fontFamily: "'Inter', sans-serif", fontSize: 13, color: "#0d47a1" }}>
-                  ⚙ <strong>Admin Mode</strong> — Add, edit, or deactivate badge definitions. Inactive badges are hidden from users but badge earning logic is preserved.
+                  ⚙ <strong>Admin Mode</strong> — Add, edit, or deactivate badge definitions. Inactive badges are hidden from users but badge earning logic is preserved in the backend.
                 </div>
               )}
 
-              {/* Levels */}
+              {/* ── LEVELS SECTION — static, informational ── */}
               <div style={{ marginBottom: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 16, color: "#121417" }}>Levels</span>
+                  <div>
+                    <span style={{ fontFamily: "'Manrope', sans-serif", fontWeight: 700, fontSize: 16, color: "#121417" }}>Levels</span>
+                    <span style={{ fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted, marginLeft: 10 }}>XP thresholds for progression</span>
+                  </div>
                   <PaginationDots total={LEVEL_DEFS.length} current={levelDot} />
                 </div>
                 <div ref={levelScrollRef} style={{ overflowX: "auto", overflowY: "hidden", height: 140, display: "flex", gap: 20, paddingBottom: 8, scrollBehavior: "smooth" }}
                   onScroll={e => { const el = e.target; setLevelDot(Math.round(el.scrollLeft / (el.scrollWidth - el.clientWidth || 1) * (LEVEL_DEFS.length - 1))); }}
                 >
-                  {LEVEL_DEFS.map(def => <LevelCard key={def.level} def={def} isCurrentLevel={def.level === userLevel} userPoints={userPoints} />)}
+                  {LEVEL_DEFS.map(def => <LevelCard key={def.level} def={def} />)}
                 </div>
               </div>
 
               {/* Divider */}
               <div style={{ width: "100%", height: 1, background: "#000", margin: "20px 0" }} />
 
-              {/* Badges */}
+              {/* ── BADGES SECTION ── */}
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -617,11 +607,10 @@ export default function AchievementsPage() {
                   )}
                 </div>
 
-                {/* Footer */}
                 <div style={{ marginTop: 16, fontFamily: "'Inter', sans-serif", fontSize: 12, color: C.textMuted }}>
                   {adminView
-                    ? `${allBadges.length} total badge definitions in system · Earned badge display is handled by Module 1 (Profile)`
-                    : `${allBadges.filter(b => b.is_active).length} active badges · Earned state shown on user profile (Module 1)`
+                    ? `${allBadges.length} total badge definitions · Earned badge display is handled by Module 1 (Profile)`
+                    : `${allBadges.filter(b => b.is_active).length} badge types available · Earning and display handled by Module 1`
                   }
                 </div>
               </div>
