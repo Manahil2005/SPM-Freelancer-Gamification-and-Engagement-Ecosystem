@@ -3,7 +3,7 @@
 // Module 11 — Gamification Service
 // UPDATED: Auto-creates progress for any user
 // ============================================================
-
+const { forceRefresh } = require("./leaderboardService");
 const db = require("../db/pool");
 
 // ============================================================
@@ -98,6 +98,18 @@ const awardPoints = async (userId, actionType, points) => {
             [userId, actionType, points, `Points awarded for: ${actionType}`]
         );
 
+        // WBS 3.1 — Keep weekly_points_log in sync so the weekly leaderboard stays current
+        await client.query(
+            `INSERT INTO gamification_weekly_points_log (user_id, week_start, points_earned, activity_count)
+             VALUES ($1, DATE_TRUNC('week', NOW())::DATE, $2, 1)
+             ON CONFLICT (user_id, week_start)
+             DO UPDATE SET
+                 points_earned  = gamification_weekly_points_log.points_earned  + EXCLUDED.points_earned,
+                 activity_count = gamification_weekly_points_log.activity_count + EXCLUDED.activity_count,
+                 updated_at     = NOW()`,
+            [userId, points]
+        );
+
         // WBS 2.3.1 — Level Advancement Logic
         const levelRes = await client.query(
             `SELECT level_number, title FROM gamification_level_definitions
@@ -124,6 +136,7 @@ const awardPoints = async (userId, actionType, points) => {
         }
 
         await client.query("COMMIT");
+        await forceRefresh(); // ← bust the leaderboard cache immediately
         return { total_points: user.total_points, level: newLevel, points_awarded: points };
     } catch (e) {
         await client.query("ROLLBACK");

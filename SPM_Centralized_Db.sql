@@ -1758,7 +1758,7 @@ CREATE TRIGGER trigger_update_ratings
 AFTER INSERT OR UPDATE ON reviews
 FOR EACH ROW EXECUTE FUNCTION update_profile_ratings();
 */
-
+/*
 INSERT INTO users (email, password_hash, first_name, last_name, role)
 VALUES (
     'manahil@example.com', 
@@ -1841,12 +1841,14 @@ SELECT u.id, u.email, u.role,
 
 
 -- Step 1: Insert users
-INSERT INTO users (id, first_name, last_name, email, password_hash) VALUES 
-(1, 'Raza', 'Khan', 'raza@test.com', 'dummy_hash_1'), 
-(2, 'Ali', 'Hassan', 'ali@test.com', 'dummy_hash_2'), 
-(3, 'Sana', 'Mir', 'sana@test.com', 'dummy_hash_3'), 
-(4, 'Hamza', 'Tariq', 'hamza@test.com', 'dummy_hash_4'), 
-(5, 'Fatima', 'Zahra', 'fatima@test.com', 'dummy_hash_5') 
+INSERT INTO users (first_name, last_name, email, password_hash) VALUES 
+('Raza', 'Khan', 'raza@test.com', 'dummy_hash_1'), 
+('Ali', 'Hassan', 'ali@test.com', 'dummy_hash_2'), 
+('Sana', 'Mir', 'sana@test.com', 'dummy_hash_3'), 
+('Hamza', 'Tariq', 'hamza@test.com', 'dummy_hash_4'), 
+('Fatima', 'Zahra', 'fatima@test.com', 'dummy_hash_5'),
+('Fatima', 'Zahra', 'fatima4@test.com', 'dummy_hash_6'), 
+('Fatima', 'Zahra', 'fatima5@test.com', 'dummy_hash_6') 
 ON CONFLICT DO NOTHING;
  
 -- Step 2: Insert user progress
@@ -2382,3 +2384,5 @@ DELETE FROM gamification_points_ledger WHERE user_id = 1 AND action_type LIKE 'o
 UPDATE gamification_user_challenges SET status = 'active', current_progress = 1, completed_date = NULL WHERE user_id = 1;
 UPDATE gamification_user_progress SET total_points = 0, activity_count = 0 WHERE user_id = 1;
 
+Select * from users
+Select * from gamification_user_progress*/

@@ -389,7 +389,7 @@ export default function LeaderboardPage() {
     leaderboard.find(e => e.rank === 1) || null,
     leaderboard.find(e => e.rank === 3) || null,
   ];
-  const tableRows = leaderboard.slice(3);
+  const tableRows = leaderboard.filter(e => e.rank > 3);
   const userEntry = leaderboard.find(e => e.user_id === CURRENT_USER_ID);
 
   return (

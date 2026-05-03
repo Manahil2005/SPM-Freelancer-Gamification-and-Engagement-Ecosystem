@@ -12,73 +12,57 @@ const cache = {
   lastRefreshed: null,
 };
 
-const CACHE_TTL_MINUTES = 5;
+const CACHE_TTL_MS = 90000;
 
 // ── Ranking algorithm ─────────────────────────────────────────
+// Replace the applyRankingAlgorithm function (around line 20-45)
 function applyRankingAlgorithm(users) {
   if (!Array.isArray(users) || users.length === 0) return [];
 
   const sorted = [...users].sort((a, b) => {
+    // Primary: points descending
     if (b.points_for_rank !== a.points_for_rank)
       return b.points_for_rank - a.points_for_rank;
+    // Secondary: activity_count descending (more active gets higher rank)
     if (b.activity_count !== a.activity_count)
       return b.activity_count - a.activity_count;
+    // Tertiary: created_at ascending (older user gets higher rank)
     return new Date(a.created_at) - new Date(b.created_at);
   });
 
-  let currentRank = 1;
-  return sorted.map((user, idx) => {
-    if (idx > 0) {
-      const prev = sorted[idx - 1];
-      const sameTier =
-        user.points_for_rank === prev.points_for_rank &&
-        user.activity_count  === prev.activity_count;
-      if (!sameTier) currentRank = idx + 1;
-    }
-    return {
-      rank:            currentRank,
-      user_id:         user.user_id,
-      name:            user.name,
-      level:           user.level,
-      total_points:    user.total_points,
-      points_for_rank: user.points_for_rank,
-      activity_count:  user.activity_count,
-    };
-  });
+  return sorted.map((user, idx) => ({
+    rank:            idx + 1,   // always unique: 1,2,3,4,5...
+    user_id:         user.user_id,
+    name:            user.name,
+    level:           user.level,
+    total_points:    user.total_points,
+    points_for_rank: user.points_for_rank,
+    activity_count:  user.activity_count,
+  }));
 }
 
-// ── Helper: get name from users table safely ──────────────────
-// Tries multiple column combinations since centralized DB
-// structure may vary across teams
-async function getUserName(userId) {
+// ── Batch-fetch all names in ONE query ───────────────────────
+// Old approach fired up to 3 serial DB queries per user (21 round-trips
+// for 7 users). This replaces all of that with a single query.
+async function getUserNames(userIds) {
+  if (!userIds.length) return {};
   try {
-    // Try first_name + last_name
-    const r1 = await pool.query(
-      `SELECT first_name, last_name FROM users WHERE id = $1`, [userId]
+    const { rows } = await pool.query(
+      `SELECT id,
+              COALESCE(
+                NULLIF(TRIM(CONCAT(COALESCE(first_name,''), ' ', COALESCE(last_name,''))), ''),
+                username,
+                name,
+                CONCAT('User ', id)
+              ) AS name
+       FROM users
+       WHERE id = ANY($1)`,
+      [userIds]
     );
-    if (r1.rows[0]) {
-      const u = r1.rows[0];
-      return `${u.first_name || ""} ${u.last_name || ""}`.trim() || `User ${userId}`;
-    }
-  } catch (_) {}
-
-  try {
-    // Try username column
-    const r2 = await pool.query(
-      `SELECT username FROM users WHERE id = $1`, [userId]
-    );
-    if (r2.rows[0]?.username) return r2.rows[0].username;
-  } catch (_) {}
-
-  try {
-    // Try name column
-    const r3 = await pool.query(
-      `SELECT name FROM users WHERE id = $1`, [userId]
-    );
-    if (r3.rows[0]?.name) return r3.rows[0].name;
-  } catch (_) {}
-
-  return `User ${userId}`;
+    return Object.fromEntries(rows.map(r => [String(r.id), r.name]));
+  } catch (_) {
+    return {};
+  }
 }
 
 // ── Fetch all-time data ───────────────────────────────────────
@@ -96,13 +80,8 @@ async function fetchAllTimeData() {
       ORDER BY total_points DESC
     `);
 
-    // Get names one by one safely
-    const withNames = [];
-    for (const row of rows) {
-      const name = await getUserName(row.user_id);
-      withNames.push({ ...row, name });
-    }
-    return withNames;
+    const nameMap = await getUserNames(rows.map(r => String(r.user_id)));
+    return rows.map(row => ({ ...row, name: nameMap[String(row.user_id)] || `User ${row.user_id}` }));
 
   } catch (err) {
     console.error("[Leaderboard] fetchAllTimeData error:", err.message);
@@ -127,12 +106,8 @@ async function fetchWeeklyData() {
       WHERE wpl.week_start = DATE_TRUNC('week', NOW())::DATE
     `);
 
-    const withNames = [];
-    for (const row of rows) {
-      const name = await getUserName(row.user_id);
-      withNames.push({ ...row, name });
-    }
-    return withNames;
+    const nameMap = await getUserNames(rows.map(r => String(r.user_id)));
+    return rows.map(row => ({ ...row, name: nameMap[String(row.user_id)] || `User ${row.user_id}` }));
 
   } catch (err) {
     console.error("[Leaderboard] fetchWeeklyData error:", err.message);
@@ -157,12 +132,8 @@ async function fetchWeeklyDataForWeek(weekStart) {
       WHERE wpl.week_start = $1
     `, [weekStart]);
 
-    const withNames = [];
-    for (const row of rows) {
-      const name = await getUserName(row.user_id);
-      withNames.push({ ...row, name });
-    }
-    return withNames;
+    const nameMap = await getUserNames(rows.map(r => String(r.user_id)));
+    return rows.map(row => ({ ...row, name: nameMap[String(row.user_id)] || `User ${row.user_id}` }));
 
   } catch (err) {
     console.error("[Leaderboard] fetchWeeklyDataForWeek error:", err.message);
@@ -173,7 +144,7 @@ async function fetchWeeklyDataForWeek(weekStart) {
 // ── Cache logic ───────────────────────────────────────────────
 function isCacheStale() {
   if (!cache.lastRefreshed) return true;
-  return Date.now() - cache.lastRefreshed.getTime() > CACHE_TTL_MINUTES * 60 * 1000;
+  return Date.now() - cache.lastRefreshed.getTime() > CACHE_TTL_MS;
 }
 
 async function refreshCache() {
