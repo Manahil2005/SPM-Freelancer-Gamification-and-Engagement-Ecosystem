@@ -54,7 +54,7 @@ const BADGE_DEFINITIONS = [
     description:    "Awarded when a freelancer completes the full onboarding process.",
     category:       "milestone",
     points_awarded: 50
-     },
+    },
 ];
 
 // ============================================================

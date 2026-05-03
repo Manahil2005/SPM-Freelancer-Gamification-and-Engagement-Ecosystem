@@ -1,39 +1,68 @@
 // ============================================================
 // services/gamificationService.js
 // Module 11 — Gamification Service
+// UPDATED: Auto-creates progress for any user
 // ============================================================
 
 const db = require("../db/pool");
 
-// 🔄 Updated for new DB schema (WBS 2.5.1 / 2.5.2)
-// Level config now sourced from gamification_level_definitions table.
-// Fallback hardcoded config kept for startup before DB seed.
-//const LEVEL_CONFIG = [
-//    { level: 1, minPoints: 0,    label: "Beginner"     },
-//    { level: 2, minPoints: 500,  label: "Intermediate" },
-//    { level: 3, minPoints: 1500, label: "Advanced"     }
-//];
+// ============================================================
+// HELPER: Ensure user has gamification progress row
+// Auto-creates if missing (critical for centralized DB)
+// ============================================================
+const ensureUserProgress = async (userId, client = null) => {
+    const queryClient = client || db;
+    
+    try {
+        // Check if user exists in users table first
+        const userCheck = await queryClient.query(
+            `SELECT id FROM users WHERE id = $1`,
+            [userId]
+        );
+        
+        if (userCheck.rows.length === 0) {
+            throw new Error(`User ${userId} does not exist in users table`);
+        }
+        
+        // Check if progress exists
+        const progressCheck = await queryClient.query(
+            `SELECT user_id FROM gamification_user_progress WHERE user_id = $1`,
+            [userId]
+        );
+        
+        if (progressCheck.rows.length === 0) {
+            // Auto-create progress row
+            await queryClient.query(
+                `INSERT INTO gamification_user_progress 
+                 (user_id, total_points, current_level, activity_count, created_at, updated_at)
+                 VALUES ($1, 0, 1, 0, NOW(), NOW())
+                 ON CONFLICT (user_id) DO NOTHING`,
+                [userId]
+            );
+            console.log(`[Gamification] Auto-created progress for user ${userId}`);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error(`[Gamification] Error ensuring progress for user ${userId}:`, error.message);
+        throw error;
+    }
+};
 
 // ============================================================
 // WBS 2.1.3 — Points Earning Logic (Atomic Update)
-// 🔄 Updated: user_progress  → gamification_user_progress
-//             total_points   → total_points         (same)
-//             activity_count → activity_count       (same)
-//             level          → current_level
-//             points_ledger  → gamification_points_ledger
-//             ledger columns: (user_id, action_type, points)
-//                           → (user_id, action_type, points, description)
 // ============================================================
 const awardPoints = async (userId, actionType, points) => {
     const client = await db.connect();
     try {
         await client.query("BEGIN");
-
+        
+        // ✅ Ensure user has progress row BEFORE updating
+        await ensureUserProgress(userId, client);
+        
         // WBS 2.5.2 / 2.5.3: Validate points are positive
         if (points <= 0) throw new Error("Invalid point value");
 
-        // 🔄 Updated for new DB schema — table: gamification_user_progress
-        //    column: current_level (was: level), last_activity_date added
         const userRes = await client.query(
             `UPDATE gamification_user_progress
              SET total_points      = total_points + $1,
@@ -63,8 +92,6 @@ const awardPoints = async (userId, actionType, points) => {
 
         const user = userRes.rows[0];
 
-        // 🔄 Updated for new DB schema — table: gamification_points_ledger
-        //    PK is ledger_id (bigserial), added description column
         await client.query(
             `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
              VALUES ($1, $2, $3, $4)`,
@@ -72,7 +99,6 @@ const awardPoints = async (userId, actionType, points) => {
         );
 
         // WBS 2.3.1 — Level Advancement Logic
-        // 🔄 Updated: current_level column (was: level)
         const levelRes = await client.query(
             `SELECT level_number, title FROM gamification_level_definitions
             WHERE min_points <= $1
@@ -89,7 +115,6 @@ const awardPoints = async (userId, actionType, points) => {
                 [newLevel, userId]
             );
 
-            // ✅ WBS 3.3 — Trigger level-up notification
             await _createNotification(client, {
                 userId,
                 type:    "level_up",
@@ -99,7 +124,7 @@ const awardPoints = async (userId, actionType, points) => {
         }
 
         await client.query("COMMIT");
-        return { total_points: user.total_points, level: newLevel };
+        return { total_points: user.total_points, level: newLevel, points_awarded: points };
     } catch (e) {
         await client.query("ROLLBACK");
         throw e;
@@ -110,15 +135,15 @@ const awardPoints = async (userId, actionType, points) => {
 
 // ============================================================
 // ✅ WBS 2.2 — Badge Rules Engine
-// Evaluates all 5 badge conditions for a user and
-// automatically awards any badges not yet held.
 // ============================================================
 const evaluateBadges = async (userId) => {
     const client = await db.connect();
     try {
         await client.query("BEGIN");
+        
+        // ✅ Ensure user has progress
+        await ensureUserProgress(userId, client);
 
-        // Fetch user progress data needed for badge evaluation
         const progressRes = await client.query(
     `SELECT gup.total_points,
             gup.current_level,
@@ -147,8 +172,6 @@ const evaluateBadges = async (userId) => {
 
         const stats = progressRes.rows[0];
 
-        // ✅ WBS 2.2.1 — Badge trigger conditions
-        // Each badge has a defined rule condition:
         const BADGE_RULES = [
             {
                 code:      "FIRST_PROJECT",
@@ -187,7 +210,6 @@ const evaluateBadges = async (userId) => {
         for (const rule of BADGE_RULES) {
             if (!rule.condition()) continue;
 
-            // Lookup badge definition
             const badgeRes = await client.query(
                 `SELECT id, points_awarded FROM gamification_badges
                  WHERE badge_code = $1 AND is_active = TRUE`,
@@ -197,9 +219,6 @@ const evaluateBadges = async (userId) => {
 
             const badge = badgeRes.rows[0];
 
-            // ✅ WBS 2.2.2 — Automated Badge Awarding Engine
-            // Check if badge already held (unique constraint protects DB, but
-            // we skip gracefully here to avoid throwing on duplicate)
             const alreadyHeld = await client.query(
                 `SELECT 1 FROM gamification_user_badges
                  WHERE user_id = $1 AND badge_id = $2`,
@@ -207,14 +226,12 @@ const evaluateBadges = async (userId) => {
             );
             if (alreadyHeld.rows.length > 0) continue;
 
-            // Award the badge
             await client.query(
                 `INSERT INTO gamification_user_badges (user_id, badge_id)
-                 VALUES ($1, $2)`,
+                 VALUES ($1, $2) ON CONFLICT (user_id, badge_id) DO NOTHING`,
                 [userId, badge.id]
             );
 
-            // Award badge bonus points via ledger
             if (badge.points_awarded > 0) {
                 await client.query(
                     `UPDATE gamification_user_progress
@@ -229,7 +246,6 @@ const evaluateBadges = async (userId) => {
                 );
             }
 
-            // ✅ WBS 3.3 — Badge notification
             await _createNotification(client, {
                 userId,
                 type:    "badge",
@@ -251,10 +267,11 @@ const evaluateBadges = async (userId) => {
 };
 
 // ============================================================
-// ✅ WBS 2.2.3 — Achievement Tracking APIs (service layer)
-// Returns all badges a user holds with badge metadata
+// ✅ WBS 2.2.3 — Achievement Tracking APIs
 // ============================================================
 const getUserBadges = async (userId) => {
+    await ensureUserProgress(userId);
+    
     const res = await db.query(
         `SELECT gb.badge_code,
                 gb.name,
@@ -274,11 +291,11 @@ const getUserBadges = async (userId) => {
 };
 
 // ============================================================
-// ✅ WBS 5.1.4 — User Profile Data Endpoint (for Module 1)
-// Returns combined progress: points, level, trust score,
-// badges (top 3) for cross-module consumption.
+// ✅ WBS 5.1.4 — User Profile Data Endpoint
 // ============================================================
 const getUserProfile = async (userId) => {
+    await ensureUserProgress(userId);
+    
     const progressRes = await db.query(
         `SELECT total_points, current_level, activity_count,
                 avg_rating, completion_rate, trust_score
@@ -293,7 +310,6 @@ const getUserProfile = async (userId) => {
 
     const progress = progressRes.rows[0];
 
-    // Top 3 displayed badges
     const badgesRes = await db.query(
         `SELECT gb.badge_code, gb.name, gb.icon_url, gub.unlocked_at
          FROM gamification_user_badges gub
@@ -317,9 +333,34 @@ const getUserProfile = async (userId) => {
 };
 
 // ============================================================
+// NEW: Ensure all users have progress (for scheduled jobs)
+// ============================================================
+const ensureAllUsersHaveProgress = async () => {
+    try {
+        const result = await db.query(`
+            INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count, created_at, updated_at)
+            SELECT id, 0, 1, 0, NOW(), NOW()
+            FROM users
+            WHERE NOT EXISTS (
+                SELECT 1 FROM gamification_user_progress WHERE user_id = users.id
+            )
+            ON CONFLICT (user_id) DO NOTHING
+            RETURNING user_id
+        `);
+        
+        if (result.rows.length > 0) {
+            console.log(`[Gamification] Created progress for ${result.rows.length} new users`);
+        }
+        
+        return result.rows.length;
+    } catch (error) {
+        console.error("[Gamification] Error ensuring all users have progress:", error);
+        return 0;
+    }
+};
+
+// ============================================================
 // Internal helper — create gamification notification
-// ✅ WBS 3.3.2 — Notification dispatcher
-// 🔄 Updated: uses gamification_notifications table
 // ============================================================
 const _createNotification = async (client, { userId, type, title, message }) => {
     await client.query(
@@ -334,5 +375,7 @@ module.exports = {
     awardPoints,
     evaluateBadges,
     getUserBadges,
-    getUserProfile
+    getUserProfile,
+    ensureAllUsersHaveProgress,
+    ensureUserProgress
 };
