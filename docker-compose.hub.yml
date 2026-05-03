@@ -1,6 +1,8 @@
+# Run from pre-built images (no building, no source code needed)
+# docker-compose -f docker-compose.hub.yml up -d
 services:
   postgres:
-    image: postgres:15-alpine
+    image: manahilmanahil/spm-postgres:15-alpine
     container_name: gamification_db
     environment:
       POSTGRES_USER: postgres
@@ -10,7 +12,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./SPM_Centralized_Db.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -18,9 +19,7 @@ services:
       retries: 5
 
   backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: manahilmanahil/spm-gamification-backend:latest
     container_name: gamification_backend
     environment:
       - PORT=5000
@@ -35,35 +34,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
 
   frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
+    image: manahilmanahil/spm-gamification-frontend:latest
     container_name: gamification_frontend
     ports:
       - "5173:80"
     depends_on:
       - backend
 
-  # ✅ pgadmin service - MUST be at the SAME LEVEL as postgres, backend, frontend
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: gamification_pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@admin.com
-      PGADMIN_DEFAULT_PASSWORD: admin
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
-    depends_on:
-      - postgres
-    volumes:
-      - pgadmin_data:/var/lib/pgadmin
-
 volumes:
   postgres_data:
-  pgadmin_data:
