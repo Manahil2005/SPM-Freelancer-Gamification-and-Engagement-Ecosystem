@@ -395,23 +395,24 @@ export default function SPMOnboarding() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [showPanel, setShowPanel] = useState(false);
+  //const [existingRole, setExistingRole] = useState(null); 
 
   const isDark = step === 1 || step === 6;
 
   useEffect(() => {
-  apiGet("/health").then(d => {
-    const ok = !!d;
-    setBackendOK(ok);
-    // Only call INTRO once backend is confirmed alive
-    if (ok) {
-      apiPost("/api/gamification/onboarding/complete-step", {
-        stepCode: "INTRO"
-      }).then(result => {
-        console.log("[Onboarding] INTRO result:", result);
-      });
-    }
-  });
-}, []);
+    apiGet("/health").then(d => {
+      const ok = !!d;
+      setBackendOK(ok);
+      // Only call INTRO once backend is confirmed alive
+      if (ok) {
+        apiPost("/api/gamification/onboarding/complete-step", {
+          stepCode: "INTRO"
+        }).then(result => {
+          console.log("[Onboarding] INTRO result:", result);
+        });
+      }
+    });
+  }, []);
 
   // ── Fetch notifications ───────────────────────────────────
   const fetchNotifications = useCallback(async () => {
@@ -544,24 +545,36 @@ export default function SPMOnboarding() {
 
     // Step 3 → 4: Complete ROLE step (+100 XP)
     if (step === 3 && role && backendOK) {
-      // First call select-role to set the role
+      console.log("[Onboarding] Saving role:", role);
+      
+      // First call select-role to set the role in users table
       apiPost("/api/gamification/onboarding/select-role", {
-        role: role.toLowerCase()
+          role: role.toLowerCase()
       }).then(roleResult => {
-        if (roleResult?.success) {
-          // Then complete the step for points
-          apiPost("/api/gamification/onboarding/complete-step", {
-            stepCode: "ROLE",
-            stepData: { role: role.toLowerCase() }
-          }).then(stepResult => {
-            if (stepResult?.success) {
-              setXp(prev => prev + (stepResult.data?.pointsAwarded || 100));
-              console.log("[Onboarding] ROLE completed, points awarded:", stepResult.data?.pointsAwarded);
-            }
-          });
-        }
+          console.log("[Onboarding] Role selection result:", roleResult);
+          if (roleResult?.success) {
+              // Then complete the step for points
+              apiPost("/api/gamification/onboarding/complete-step", {
+                  stepCode: "ROLE",
+                  stepData: { role: role.toLowerCase() }
+              }).then(stepResult => {
+                  console.log("[Onboarding] ROLE step result:", stepResult);
+                  if (stepResult?.success) {
+                      const pointsEarned = stepResult.data?.pointsAwarded || 100;
+                      setXp(prev => prev + pointsEarned);
+                      console.log("[Onboarding] ROLE completed, +", pointsEarned, "XP");
+                  } else {
+                      console.error("[Onboarding] ROLE step failed:", stepResult);
+                  }
+              });
+          } else {
+              console.error("[Onboarding] Role selection failed:", roleResult);
+          }
       });
+      goTo(step + 1);
+      return;
     }
+
 
     // Step 4 → 5: Complete MODULES step (no points currently, but backend handles)
     if (step === 4 && backendOK) {

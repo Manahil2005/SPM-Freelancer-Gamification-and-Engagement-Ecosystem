@@ -276,7 +276,7 @@ const handleCompleteOnboardingStep = async (req, res) => {
             });
         }
 
-        // ── 2. UPSERT gamification_user_progress (FIXED) ──
+        // ── 2. UPSERT gamification_user_progress  ──
         // Use INSERT with ON CONFLICT to handle existing rows gracefully
         await client.query(
             `INSERT INTO gamification_user_progress
@@ -346,9 +346,7 @@ const handleCompleteOnboardingStep = async (req, res) => {
                     break;
 
                 case 'MODULES': {
-                    const moduleCount = parseInt(stepData?.moduleCount) || 0;
-                    pointsAwarded = moduleCount * 10;
-                    if (stepData?.hasExplorerBonus) pointsAwarded += 50;
+                    pointsAwarded = 50;
                     break;
                 }
 
@@ -578,6 +576,28 @@ const handleGetOnboardingProgress = async (req, res) => {
 
 // ── legacy alias kept for route backward-compat ──
 const handleGetOnboarding = handleGetOnboardingProgress;
+
+
+// ============================================================
+// INITIALIZATION: Ensure all existing users have progress
+// Add this at the END of the file, BEFORE module.exports
+// ============================================================
+const { ensureAllUsersHaveProgress } = require("../services/gamificationService");
+
+// Run on module load to fix any missing progress
+(async () => {
+    try {
+        const count = await ensureAllUsersHaveProgress();
+        if (count > 0) {
+            console.log(`[Gamification] Initialized progress for ${count} users`);
+        } else {
+            console.log(`[Gamification] All users already have progress initialized`);
+        }
+    } catch (error) {
+        console.error("[Gamification] Failed to initialize users:", error.message);
+    }
+})();
+
 
 module.exports = {
     handleAwardPoints,
