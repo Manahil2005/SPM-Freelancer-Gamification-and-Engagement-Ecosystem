@@ -47,7 +47,14 @@ const BADGE_DEFINITIONS = [
         description:    "Awarded after completing 3 or more challenges.",
         category:       "challenges",
         points_awarded: 200
-    }
+    },
+    {
+    badge_code:     "ONBOARDING_COMPLETE",
+    name:           "Welcome Aboard",
+    description:    "Awarded when a freelancer completes the full onboarding process.",
+    category:       "milestone",
+    points_awarded: 50
+     },
 ];
 
 // ============================================================

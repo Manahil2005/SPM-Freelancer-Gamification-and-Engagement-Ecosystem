@@ -67,6 +67,7 @@ const WHO_WE_ARE = [
 const BADGE_TIERS = [
   // Challenge Master — first badge, awarded after completing 3+ challenges
   // Design: dark teal hexagon with yellow lightning bolt (see attached badge image)
+  { key: "onboarding_complete", icon: "🎉", name: "Welcome Aboard", xp: 50, color: "#0f5e47", bg: "#e0faf7", border: "#6bd8cb", code: "ONBOARDING_COMPLETE", desc: "Awarded when you complete the full onboarding process." },
   { key: "challenge_master", icon: "⚡", name: "Challenge Master", xp: 200, color: "#0f5e47", bg: "#e0faf7", border: "#6bd8cb", code: "CHALLENGE_MASTER", desc: "Awarded after completing 3 or more challenges." },
   { key: "pathfinder", icon: "🎯", name: "Pathfinder", xp: 100, color: "#0f6e56", bg: "#e0faf7", border: "#6bd8cb", code: "PATHFINDER", desc: "Awarded for starting your SPM journey" },
   { key: "explorer", icon: "🧭", name: "Explorer", xp: 250, color: "#264778", bg: "#dbe8ff", border: "#a9c7ff", code: "EXPLORER", desc: "Awarded for exploring all platform modules" },
@@ -513,51 +514,94 @@ export default function SPMOnboarding() {
      if (step < 6) goTo(step + 1);
    }*/
 
-  // Update the next() function in your main component
+
+// Update the next() function in your main component to match backend expectations
   function next() {
     const userId = getCurrentUserId();
-    // Step 2 → 3: Award points for viewing "Who We Are"
+    
+    // Step 1 → 2: Complete INTRO step (no points)
+    if (step === 1 && backendOK) {
+      apiPost("/api/gamification/onboarding/complete-step", {
+        stepCode: "INTRO"
+      }).then(result => {
+        if (result?.success) {
+          console.log("[Onboarding] INTRO completed");
+        }
+      });
+    }
+    
+    // Step 2 → 3: Complete ABOUT step (+50 XP)
     if (step === 2 && backendOK) {
       apiPost("/api/gamification/onboarding/complete-step", {
-        stepCode: "ABOUT",
-        stepData: { viewed: true }
+        stepCode: "ABOUT"
       }).then(result => {
         if (result?.success) {
-          setXp(prev => prev + result.data.pointsAwarded);
+          setXp(prev => prev + (result.data?.pointsAwarded || 50));
+          console.log("[Onboarding] ABOUT completed, points awarded:", result.data?.pointsAwarded);
         }
       });
     }
 
-    // Step 3 → 4: Role selected — award XP
+    // Step 3 → 4: Complete ROLE step (+100 XP)
     if (step === 3 && role && backendOK) {
+      // First call select-role to set the role
       apiPost("/api/gamification/onboarding/select-role", {
         role: role.toLowerCase()
-      }).then(result => {
-        if (result?.success) {
-          setXp(prev => prev + result.pointsAwarded);
+      }).then(roleResult => {
+        if (roleResult?.success) {
+          // Then complete the step for points
+          apiPost("/api/gamification/onboarding/complete-step", {
+            stepCode: "ROLE",
+            stepData: { role: role.toLowerCase() }
+          }).then(stepResult => {
+            if (stepResult?.success) {
+              setXp(prev => prev + (stepResult.data?.pointsAwarded || 100));
+              console.log("[Onboarding] ROLE completed, points awarded:", stepResult.data?.pointsAwarded);
+            }
+          });
         }
-      });
-
-      // Create notification (using existing notification system)
-      apiPost("/api/notifications/send", {
-        user_id: userId,
-        type: "badge",
-        message: `You selected the ${role} role and earned 100 XP!`
       });
     }
 
-    // Step 4 → 5: Modules explored — award challenge_master badge + XP
-    if (step === 4) {
-      // Award the Challenge Master badge — first badge in the system (+200 XP)
-      setEarnedBadge("challenge_master");
-      setXp(x => x + 200);
+    // Step 4 → 5: Complete MODULES step (no points currently, but backend handles)
+    if (step === 4 && backendOK) {
+      apiPost("/api/gamification/onboarding/complete-step", {
+        stepCode: "MODULES",
+        stepData: { moduleCount: 12, hasExplorerBonus: true }
+      }).then(result => {
+        if (result?.success) {
+          console.log("[Onboarding] MODULES completed");
+        }
+      });
+    }
 
-      if (backendOK) {
-        apiPost("/api/gamification/onboarding/complete-step", {
-          stepCode: "MODULES",
-          stepData: { moduleCount: 12, hasExplorerBonus: true }
-        });
-      }
+    // Step 5 → 6: Complete BADGE step (+50 XP for ONBOARDING_COMPLETE)
+    if (step === 5 && backendOK) {
+      setEarnedBadge("onboarding_complete");
+      setXp(x => x + 50);
+      
+      apiPost("/api/gamification/onboarding/complete-step", {
+        stepCode: "BADGE",
+        stepData: { badgeCode: "ONBOARDING_COMPLETE" }
+      }).then(result => {
+        if (result?.success) {
+          console.log("[Onboarding] BADGE completed, points awarded:", result.data?.pointsAwarded);
+        }
+      });
+    }
+
+    // Step 6: Complete DONE step (finalize onboarding)
+    if (step === 6 && backendOK) {
+      apiPost("/api/gamification/onboarding/complete-step", {
+        stepCode: "DONE"
+      }).then(result => {
+        if (result?.success) {
+          console.log("[Onboarding] DONE - onboarding fully completed!");
+          if (result.data?.totalOnboardingPoints) {
+            console.log("[Onboarding] Total onboarding points:", result.data.totalOnboardingPoints);
+          }
+        }
+      });
     }
 
     if (step < 6) goTo(step + 1);
@@ -1413,6 +1457,7 @@ export default function SPMOnboarding() {
     const badge = BADGE_TIERS.find(b => b.key === earnedBadge) || BADGE_TIERS[0];
     const [reveal, setReveal] = useState(false);
     useEffect(() => { const t = setTimeout(() => setReveal(true), 300); return () => clearTimeout(t); }, []);
+    
     return (
       <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "20px 22px 10px", display: "flex", justifyContent: "center" }}>
         <div style={{ width: "100%", maxWidth: 560 }}>
@@ -1420,40 +1465,26 @@ export default function SPMOnboarding() {
           Step 5 of 6 <span style={{ background: "#e0faf7", color: "#0f6e56", fontSize: 7.5, fontWeight: 700, borderRadius: 4, padding: "1.5px 6px", border: "1px solid #6bd8cb" }}>Badge Unlocked!</span>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", padding: "20px", background: `linear-gradient(135deg, ${badge.bg} 0%, #f9f9ff 100%)`, border: `2px solid ${badge.border}`, borderRadius: 14, marginBottom: 14, transform: reveal ? "translateY(0) scale(1)" : "translateY(12px) scale(.9)", opacity: reveal ? 1 : 0, transition: "all .55s cubic-bezier(.34,1.56,.64,1)" }}>
-
-          {/* Challenge Master Badge — dark teal hexagon with yellow lightning bolt, matching badge design */}
-          {badge.key === "challenge_master" ? (
-            <div style={{ marginBottom: 12, animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" }}>
-              <svg width="84" height="84" viewBox="0 0 84 84" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="hexGrad" x1="42" y1="8" x2="42" y2="76" gradientUnits="userSpaceOnUse">
-                    <stop offset="0%" stopColor="#1a6e57" />
-                    <stop offset="100%" stopColor="#0a3d2e" />
-                  </linearGradient>
-                  <filter id="hexGlow">
-                    <feGaussianBlur stdDeviation="2.5" result="blur" />
-                    <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-                  </filter>
-                </defs>
-                {/* Outer glow ring */}
-                <polygon points="42,4 74,22 74,62 42,80 10,62 10,22" fill="none" stroke="#6bd8cb" strokeWidth="1.5" opacity="0.35" />
-                {/* Hexagon body */}
-                <polygon points="42,10 70,26 70,58 42,74 14,58 14,26" fill="url(#hexGrad)" stroke="#4db89e" strokeWidth="1.8" filter="url(#hexGlow)" />
-                {/* Inner subtle highlight ring */}
-                <polygon points="42,16 65,29 65,55 42,68 19,55 19,29" fill="none" stroke="rgba(107,216,203,0.2)" strokeWidth="1" />
-                {/* Lightning bolt — yellow, centered */}
-                <path d="M46 22L35 43H42.5L38 62L51 39H43L46 22Z" fill="#f0c040" stroke="#e8a800" strokeWidth="0.8" strokeLinejoin="round" />
-              </svg>
-            </div>
-          ) : (
-            <div style={{ width: 74, height: 74, borderRadius: "50%", background: badge.bg, border: `3px solid ${badge.border}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34, marginBottom: 12, boxShadow: `0 0 0 7px ${badge.bg}, 0 0 0 9px ${badge.border}38`, animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" }}>{badge.icon}</div>
-          )}
+          
+          {/* Welcome Aboard Badge - Celebration style */}
+          <div style={{ 
+            width: 84, height: 84, 
+            borderRadius: "50%", 
+            background: `linear-gradient(135deg, ${badge.bg}, #ffffff)`,
+            border: `3px solid ${badge.border}`,
+            display: "flex", alignItems: "center", justifyContent: "center", 
+            fontSize: 42, marginBottom: 12, 
+            boxShadow: `0 0 0 7px ${badge.bg}, 0 0 0 9px ${badge.border}38`,
+            animation: reveal ? "glow 2s ease-in-out infinite alternate" : "none" 
+          }}>
+            🎉
+          </div>
 
           <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 8, fontWeight: 700, color: badge.color, textTransform: "uppercase", letterSpacing: ".2em", marginBottom: 5 }}>Badge Earned</div>
           <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 20, fontWeight: 900, color: T.primary, marginBottom: 5 }}>{badge.name}</div>
           <div style={{ fontSize: 10.5, color: T.onSurfaceVar, lineHeight: 1.65, maxWidth: 270, marginBottom: 11 }}>{badge.desc}</div>
 
-          {/* Badge code pill — matches the "Code: CHALLENGE_MASTER" shown in the badge design */}
+          {/* Badge code pill */}
           {badge.code && (
             <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: T.surfaceContainer, border: `1px solid ${badge.border}`, borderRadius: 5, padding: "3px 10px", marginBottom: 10 }}>
               <span style={{ fontSize: 8.5, fontWeight: 500, color: T.secondary }}>Code:</span>
@@ -1462,10 +1493,11 @@ export default function SPMOnboarding() {
           )}
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: badge.bg, border: `1px solid ${badge.border}`, borderRadius: 18, padding: "4px 13px" }}>
-            <span style={{ fontSize: 11 }}>⚡</span>
+            <span style={{ fontSize: 11 }}>⭐</span>
             <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 900, color: badge.color }}>+{badge.xp} XP</span>
           </div>
         </div>
+        
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, textTransform: "uppercase", letterSpacing: ".14em", marginBottom: 8 }}>Your Badge Collection</div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 7 }}>
@@ -1481,6 +1513,7 @@ export default function SPMOnboarding() {
             })}
           </div>
         </div>
+        
         <div style={{ background: T.surfaceContainer, borderRadius: 9, padding: "9px 13px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
             <span style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, textTransform: "uppercase", letterSpacing: ".1em" }}>XP Progress</span>

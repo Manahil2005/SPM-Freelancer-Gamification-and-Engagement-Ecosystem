@@ -353,26 +353,29 @@ const handleCompleteOnboardingStep = async (req, res) => {
                 }
 
                 case 'BADGE': {
-                    pointsAwarded = 250;
-                    const badgeCode = stepData?.badgeCode || 'CHALLENGE_MASTER';
+                    pointsAwarded = 50;  
+                    const badgeCode = stepData?.badgeCode || 'ONBOARDING_COMPLETE';
                     const badgeRow = await client.query(
-                        `SELECT id FROM gamification_badges
-                         WHERE badge_code = $1 AND is_active = TRUE`,
+                        `SELECT id, points_awarded FROM gamification_badges
+                        WHERE badge_code = $1 AND is_active = TRUE`,
                         [badgeCode]
                     );
                     if (badgeRow.rows.length > 0) {
                         const badge = badgeRow.rows[0];
+                        // Use the badge's points_awarded from the database
+                        pointsAwarded = badge.points_awarded;
+                        
                         await client.query(
                             `INSERT INTO gamification_user_badges (user_id, badge_id)
-                             VALUES ($1, $2) ON CONFLICT (user_id, badge_id) DO NOTHING`,
+                            VALUES ($1, $2) ON CONFLICT (user_id, badge_id) DO NOTHING`,
                             [userId, badge.id]
                         );
                         await client.query(
                             `INSERT INTO gamification_notifications
-                                 (user_id, notification_type, title, message)
-                             VALUES ($1, 'badge', $2, $3)`,
-                            [userId, 'Badge Unlocked!',
-                             `You earned the "${badgeCode.replace(/_/g, ' ')}" badge during onboarding!`]
+                                (user_id, notification_type, title, message)
+                            VALUES ($1, 'badge', $2, $3)`,
+                            [userId, '🎉 Welcome Aboard! 🎉',
+                            `You earned the "${badgeCode.replace(/_/g, ' ')}" badge for completing onboarding! +${pointsAwarded} XP`]
                         );
                     }
                     break;
