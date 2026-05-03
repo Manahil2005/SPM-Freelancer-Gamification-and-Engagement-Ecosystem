@@ -74,9 +74,21 @@ const awardPoints = async (userId, actionType, points) => {
             [points, userId]
         );
 
-        if (userRes.rows.length === 0) {
-            throw new Error(`User with ID ${userId} not found in gamification_user_progress table.`);
-        }
+      if (userRes.rows.length === 0) {
+        await client.query(
+            `INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+            VALUES ($1, $2, 1, 1)
+            ON CONFLICT (user_id) DO NOTHING`,
+            [userId, points]
+        );
+        await client.query(
+            `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+            VALUES ($1, $2, $3, $4)`,
+            [userId, actionType, points, `Points awarded for: ${actionType}`]
+        );
+        await client.query("COMMIT");
+        return { total_points: points, level: 1 };
+    }
 
         const user = userRes.rows[0];
 
@@ -133,22 +145,29 @@ const evaluateBadges = async (userId) => {
         await ensureUserProgress(userId, client);
 
         const progressRes = await client.query(
-            `SELECT gup.total_points,
-                    gup.current_level,
-                    gup.activity_count,
-                    gup.avg_rating,
-                    gup.completion_rate,
-                    gup.streak_days,
-                    (SELECT COUNT(*) FROM projects
-                     WHERE freelancer_id = $1 AND status = 'completed') AS completed_projects,
-                    (SELECT COUNT(*) FROM gamification_user_challenges guc
-                     JOIN gamification_challenges gc ON gc.id = guc.challenge_id
-                     WHERE guc.user_id = $1 AND guc.status = 'completed') AS completed_challenges
-             FROM gamification_user_progress gup
-             WHERE gup.user_id = $1`,
+    `SELECT gup.total_points,
+            gup.current_level,
+            gup.activity_count,
+            gup.avg_rating,
+            gup.completion_rate,
+            gup.streak_days,
+            (SELECT COUNT(*) FROM projects
+             WHERE freelancer_id = $1 AND status = 'completed') AS completed_projects,
+            (SELECT COUNT(*) FROM gamification_user_challenges guc
+             JOIN gamification_challenges gc ON gc.id = guc.challenge_id
+             WHERE guc.user_id = $1 AND guc.status = 'completed') AS completed_challenges,
+            COALESCE(guc_ob.status = 'completed', false) AS onboarding_completed
+     FROM gamification_user_progress gup
+     LEFT JOIN gamification_user_challenges guc_ob
+        ON guc_ob.user_id = gup.user_id
+        AND guc_ob.challenge_id = (
+            SELECT id FROM gamification_challenges
+            WHERE challenge_code = 'ONBOARDING'
+            LIMIT 1
+        )
+            WHERE gup.user_id = $1`,
             [userId]
         );
-
         if (progressRes.rows.length === 0) return [];
 
         const stats = progressRes.rows[0];
@@ -179,6 +198,11 @@ const evaluateBadges = async (userId) => {
                 condition: () => parseInt(stats.completed_challenges) >= 3,
                 reason:    "Completed 3+ challenges"
             },
+            {
+                code:      "ONBOARDING_COMPLETE",
+                condition: () => stats.onboarding_completed === true,
+                reason:    "Completed the full onboarding process"
+            }
         ];
 
         const awarded = [];
