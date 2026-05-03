@@ -397,7 +397,20 @@ export default function SPMOnboarding() {
 
   const isDark = step === 1 || step === 6;
 
-  useEffect(() => { apiGet("/health").then(d => setBackendOK(!!d)); }, []);
+  useEffect(() => {
+  apiGet("/health").then(d => {
+    const ok = !!d;
+    setBackendOK(ok);
+    // Only call INTRO once backend is confirmed alive
+    if (ok) {
+      apiPost("/api/gamification/onboarding/complete-step", {
+        stepCode: "INTRO"
+      }).then(result => {
+        console.log("[Onboarding] INTRO result:", result);
+      });
+    }
+  });
+}, []);
 
   // ── Fetch notifications ───────────────────────────────────
   const fetchNotifications = useCallback(async () => {
@@ -503,7 +516,6 @@ export default function SPMOnboarding() {
   // Update the next() function in your main component
   function next() {
     const userId = getCurrentUserId();
-
     // Step 2 → 3: Award points for viewing "Who We Are"
     if (step === 2 && backendOK) {
       apiPost("/api/gamification/onboarding/complete-step", {

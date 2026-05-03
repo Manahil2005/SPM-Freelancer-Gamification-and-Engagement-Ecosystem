@@ -1838,24 +1838,24 @@ SELECT u.id, u.email, u.role,
          LEFT JOIN gamification_badges gb ON gb.id = gub.badge_id
          WHERE u.id = 1
          GROUP BY u.id, gp.total_points, gp.current_level, gp.activity_count
-		 
+
+
 -- Step 1: Insert users
 INSERT INTO users (id, first_name, last_name, email, password_hash) VALUES 
 (1, 'Raza', 'Khan', 'raza@test.com', 'dummy_hash_1'), 
 (2, 'Ali', 'Hassan', 'ali@test.com', 'dummy_hash_2'), 
 (3, 'Sana', 'Mir', 'sana@test.com', 'dummy_hash_3'), 
 (4, 'Hamza', 'Tariq', 'hamza@test.com', 'dummy_hash_4'), 
-(5, 'Fatima', 'Zahra', 'fatima@test.com', 'dummy_hash_5')
+(5, 'Fatima', 'Zahra', 'fatima@test.com', 'dummy_hash_5') 
 ON CONFLICT DO NOTHING;
-
-
+ 
 -- Step 2: Insert user progress
 INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count, avg_rating, completion_rate) VALUES 
 (1, 3200, 3, 91, 4.90, 0.99), 
 (2, 1850, 2, 42, 4.80, 0.95), 
 (3, 1850, 2, 38, 4.50, 0.88), 
 (4, 1100, 2, 25, 4.20, 0.80), 
-(5, 720, 1, 17, 3.80, 0.72)
+(5, 720, 1, 17, 3.80, 0.72) 
 ON CONFLICT DO NOTHING;
 
 -- Step 3: Insert weekly points
@@ -1864,9 +1864,9 @@ INSERT INTO gamification_weekly_points_log (user_id, week_start, points_earned, 
 (2, DATE_TRUNC('week', NOW())::DATE, 320, 8), 
 (3, DATE_TRUNC('week', NOW())::DATE, 410, 11), 
 (4, DATE_TRUNC('week', NOW())::DATE, 190, 5), 
-(5, DATE_TRUNC('week', NOW())::DATE, 75, 3)
+(5, DATE_TRUNC('week', NOW())::DATE, 75, 3) 
 ON CONFLICT DO NOTHING;
-select * from gamification_weekly_points_log
+
 -- Step 4: Insert notifications
 INSERT INTO gamification_notifications (user_id, notification_type, title, message) VALUES 
 (1, 'points', 'Points Earned', 'You earned 50 points for completing a project!'), 
@@ -1878,13 +1878,13 @@ ON CONFLICT DO NOTHING;
 
 -- Step 5: Insert badges
 INSERT INTO gamification_badges (badge_code, name, description, category, points_awarded) VALUES 
-('FIRST_PROJECT', 'First Project', 'Completed your first project on the platform', 'achievement', 100), 
-('RISING_STAR', 'Rising Star', 'Reached Level 2 and earned 500+ points', 'achievement', 150), 
-('CONSISTENT_PERFORMER', 'Consistent Performer', 'Maintained a 7-day activity streak', 'achievement', 200), 
-('TOP_RATED', 'Top Rated', 'Received an average rating of 4.5 or above', 'achievement', 250), 
-('CHALLENGE_MASTER', 'Challenge Master', 'Completed 10 challenges', 'achievement', 300) 
+('first_project', 'First Project', 'Completed your first project on the platform', 'achievement', 100), 
+('rising_star', 'Rising Star', 'Reached Level 2 and earned 500+ points', 'achievement', 150), 
+('consistent_performer', 'Consistent Performer', 'Maintained a 7-day activity streak', 'achievement', 200), 
+('top_rated', 'Top Rated', 'Received an average rating of 4.5 or above', 'achievement', 250), 
+('challenge_master', 'Challenge Master', 'Completed 10 challenges', 'achievement', 300) 
 ON CONFLICT (badge_code) DO NOTHING;
-delete from gamification_badges
+
 -- Step 6: Give user 1 some badges
 INSERT INTO gamification_user_badges (user_id, badge_id) 
 SELECT 1, id FROM gamification_badges 
@@ -1892,4 +1892,493 @@ WHERE badge_code IN ('first_project', 'rising_star')
 ON CONFLICT DO NOTHING;
 
 select * from users
+
+delete from gamification_badges
+
+-- ===================================================================
+-- ONBOARDING CHALLENGE SEED
+-- Add this to SPM_Centralized_Db.sql (Module 11 section, after
+-- the gamification_challenges CREATE TABLE statement).
+--
+-- This is the ONLY change needed to the database.
+-- No new tables. No schema alterations.
+-- ===================================================================
+
+INSERT INTO gamification_challenges
+    (challenge_code, title, description, target_count, reward_points,
+     expiry_days, challenge_type, action_required, is_active)
+VALUES
+    ('ONBOARDING',
+     'Platform Onboarding',
+     'Complete the one-time platform onboarding tour to earn XP and your first badge.',
+     6,        -- target_count = 6 steps
+     410,      -- total reward_points (50+100+10*n+250 max)
+     0,        -- expiry_days = 0 means no expiry
+     'onboarding',
+     'complete_onboarding',
+     TRUE)
+ON CONFLICT (challenge_code) DO NOTHING;
+
+-- ===================================================================
+-- HOW THE EXISTING TABLES ARE USED FOR ONBOARDING STATE
+-- ===================================================================
+--
+-- gamification_user_challenges
+--   One row per user (UNIQUE user_id, challenge_id).
+--   current_progress  → which step the user is on (1–6)
+--   status            → 'active' while in progress, 'completed' when DONE
+--   start_date        → when onboarding began
+--   completed_date    → stamped permanently when DONE step is hit
+--
+-- users
+--   role              → written directly when user selects their role
+--
+-- gamification_user_badges
+--   Onboarding badge inserted here (same as any other badge)
+--
+-- gamification_points_ledger
+--   action_type = 'onboarding_step_intro'   (0 pts, tracked)
+--   action_type = 'onboarding_step_about'   (50 pts)
+--   action_type = 'onboarding_step_role'    (100 pts)
+--   action_type = 'onboarding_step_modules' (10*n + optional 50 pts)
+--   action_type = 'onboarding_step_badge'   (250 + badge bonus pts)
+--   action_type = 'onboarding_step_done'    (0 pts, tracked)
+--   SUM of these = total onboarding XP earned
+--
+-- gamification_notifications
+--   XP and badge notifications inserted here (same as rest of platform)
+-- ===================================================================
+
+
+
+
+
+
+
+INSERT INTO gamification_challenges
+    (challenge_code, title, description, target_count, reward_points,
+     expiry_days, challenge_type, action_required, is_active)
+VALUES
+    ('ONBOARDING',
+     'Platform Onboarding',
+     'Complete the one time platform onboarding tour to earn XP and your first badge.',
+     6,
+     50,
+     0,
+     'onboarding',
+     'complete_onboarding',
+     TRUE)
+ON CONFLICT (challenge_code) DO NOTHING;
+
+
+-- ===================================================================
+-- ONBOARDING DEBUG & FIX SCRIPT
+-- The previous failures were caused by pgAdmin rendering email
+-- addresses as mailto: hyperlinks, corrupting the WHERE clauses.
+-- This script uses a psql variable to avoid repeating the email.
+-- ===================================================================
+
+-- ── Step 1: See what actually exists in DB right now ──────────────
+
+-- Check if test user was created at all
+SELECT id, email, role FROM users WHERE email LIKE '%onboard_test%';
+
+-- Check the onboarding challenge row
+SELECT
+    guc.id,
+    guc.user_id,
+    guc.current_progress,
+    guc.status,
+    guc.start_date,
+    guc.completed_date
+FROM gamification_user_challenges guc
+JOIN gamification_challenges gc ON gc.id = guc.challenge_id
+WHERE gc.challenge_code = 'ONBOARDING'
+ORDER BY guc.id DESC
+LIMIT 10;
+
+-- Check points ledger for onboarding entries
+SELECT user_id, action_type, points, description, created_at
+FROM gamification_points_ledger
+WHERE action_type LIKE 'onboarding_step_%'
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Check badges
+SELECT gub.user_id, gb.badge_code, gub.unlocked_at
+FROM gamification_user_badges gub
+JOIN gamification_badges gb ON gb.id = gub.badge_id
+ORDER BY gub.unlocked_at DESC
+LIMIT 10;
+
+
+-- ===================================================================
+-- FULL CLEAN RESET — wipe everything and redo from scratch cleanly
+-- ===================================================================
+
+-- 1. Find the test user id first
+-- (copy the id from the SELECT above and use it in the DELETEs below,
+--  OR just use the subquery form which is safe)
+
+DELETE FROM gamification_user_challenges
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%onboard_test%');
+
+DELETE FROM gamification_points_ledger
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%onboard_test%');
+
+DELETE FROM gamification_user_badges
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%onboard_test%');
+
+DELETE FROM gamification_notifications
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%onboard_test%');
+
+DELETE FROM gamification_user_progress
+WHERE user_id IN (SELECT id FROM users WHERE email LIKE '%onboard_test%');
+
+DELETE FROM users WHERE email LIKE '%onboard_test%';
+
+-- 2. Re-create test user
+INSERT INTO users (id,email, password_hash, first_name, last_name, role)
+VALUES ('6','onboard_test@nexus.com', 'dummy_hash', 'Test', 'Onboard', 'freelancer');
+
+-- 3. Get the new user id — NOTE IT DOWN
+SELECT id AS test_user_id FROM users WHERE email LIKE '%onboard_test%';
+
+-- ===================================================================
+-- FROM HERE: replace 9999 with the id printed above
+-- We use a literal integer to avoid all email/mailto issues
+-- ===================================================================
+
+-- 4. Create gamification progress row
+INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+VALUES (6, 0, 1, 0);
+
+-- 5. Get the ONBOARDING challenge id — NOTE IT DOWN
+SELECT id AS onboarding_challenge_id FROM gamification_challenges WHERE challenge_code = 'ONBOARDING';
+
+-- ===================================================================
+-- TEST 1: Challenge seed exists
+-- ===================================================================
+SELECT
+    id, challenge_code, title, target_count, reward_points, is_active
+FROM gamification_challenges
+WHERE challenge_code = 'ONBOARDING';
+-- PASS: 1 row, is_active=true, target_count=6
+
+
+-- ===================================================================
+-- TEST 2: No onboarding row yet
+-- ===================================================================
+SELECT COUNT(*) AS row_count
+FROM gamification_user_challenges
+WHERE user_id = 6;
+-- PASS: row_count = 0
+
+
+-- ===================================================================
+-- TEST 3: INTRO step — create challenge row
+-- Replace 8888 with the onboarding_challenge_id from step 5
+-- ===================================================================
+INSERT INTO gamification_user_challenges
+    (user_id, challenge_id, current_progress, status)
+VALUES
+    (6, 441, 1, 'active');
+
+SELECT current_progress, status, start_date, completed_date
+FROM gamification_user_challenges
+WHERE user_id = 6 AND challenge_id = 441;
+-- PASS: current_progress=1, status='active', completed_date=NULL
+
+
+-- ===================================================================
+-- TEST 4: ABOUT step — 50 XP
+-- ===================================================================
+UPDATE gamification_user_challenges
+SET current_progress = 2, last_updated = NOW()
+WHERE user_id = 6 AND challenge_id = 441 AND current_progress < 2;
+
+INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+VALUES (6, 'onboarding_step_about', 50, 'Onboarding step: ABOUT');
+
+UPDATE gamification_user_progress
+SET total_points = total_points + 50, activity_count = activity_count + 1
+WHERE user_id = 6;
+
+SELECT total_points FROM gamification_user_progress WHERE user_id = 6;
+-- PASS: total_points = 50
+
+
+-- ===================================================================
+-- TEST 5: ROLE step — write role + 100 XP
+-- ===================================================================
+UPDATE users SET role = 'client' WHERE id = 6;
+
+UPDATE gamification_user_challenges
+SET current_progress = 3, last_updated = NOW()
+WHERE user_id = 6 AND challenge_id = 441 AND current_progress < 3;
+
+INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+VALUES (6, 'onboarding_step_role', 100, 'Onboarding step: ROLE');
+
+UPDATE gamification_user_progress
+SET total_points = total_points + 100, activity_count = activity_count + 1
+WHERE user_id = 6;
+
+SELECT role FROM users WHERE id = 6;
+-- PASS: role = 'client'
+
+SELECT total_points FROM gamification_user_progress WHERE user_id = 6;
+-- PASS: total_points = 150
+
+
+-- ===================================================================
+-- TEST 6: MODULES step — 5 modules * 10 + 50 explorer bonus = 100 XP
+-- ===================================================================
+UPDATE gamification_user_challenges
+SET current_progress = 4, last_updated = NOW()
+WHERE user_id = 6 AND challenge_id = 441 AND current_progress < 4;
+
+INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+VALUES (6, 'onboarding_step_modules', 100, 'Onboarding step: MODULES');
+
+UPDATE gamification_user_progress
+SET total_points = total_points + 100, activity_count = activity_count + 1
+WHERE user_id = 6;
+
+SELECT total_points FROM gamification_user_progress WHERE user_id = 6;
+-- PASS: total_points = 250
+
+
+-- ===================================================================
+-- TEST 7: BADGE step — award CHALLENGE_MASTER + 300 XP (250 + 50 bonus)
+-- ===================================================================
+INSERT INTO gamification_badges (badge_code, name, description, category, points_awarded)
+VALUES ('CHALLENGE_MASTER', 'Challenge Master', 'Completed 3+ challenges', 'achievement', 50)
+ON CONFLICT (badge_code) DO NOTHING;
+
+INSERT INTO gamification_user_badges (user_id, badge_id)
+SELECT 6, id FROM gamification_badges WHERE badge_code = 'CHALLENGE_MASTER'
+ON CONFLICT (user_id, badge_id) DO NOTHING;
+
+UPDATE gamification_user_challenges
+SET current_progress = 5, last_updated = NOW()
+WHERE user_id = 6 AND challenge_id = 441 AND current_progress < 5;
+
+INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
+VALUES (6, 'onboarding_step_badge', 300, 'Onboarding step: BADGE');
+
+UPDATE gamification_user_progress
+SET total_points = total_points + 300, activity_count = activity_count + 1
+WHERE user_id = 6;
+
+SELECT gb.badge_code, gub.unlocked_at
+FROM gamification_user_badges gub
+JOIN gamification_badges gb ON gb.id = gub.badge_id
+WHERE gub.user_id = 6;
+-- PASS: badge_code = 'CHALLENGE_MASTER'
+
+SELECT total_points FROM gamification_user_progress WHERE user_id =6;
+-- PASS: total_points = 550
+
+
+-- ===================================================================
+-- TEST 8: DONE step — stamp permanent gate
+-- ===================================================================
+UPDATE gamification_user_challenges
+SET status           = 'completed',
+    completed_date   = NOW(),
+    current_progress = 6,
+    last_updated     = NOW()
+WHERE user_id = 6 AND challenge_id = 441;
+
+SELECT current_progress, status, start_date, completed_date
+FROM gamification_user_challenges
+WHERE user_id = 6 AND challenge_id = 441;
+-- PASS: status='completed', current_progress=6, completed_date IS NOT NULL
+
+
+-- ===================================================================
+-- TEST 9: Gate holds — status check after DONE
+-- ===================================================================
+SELECT
+    CASE
+        WHEN status = 'completed' THEN 'PASS — gate locked'
+        ELSE 'FAIL — gate open'
+    END AS gate_check
+FROM gamification_user_challenges
+WHERE user_id = 6 AND challenge_id = 441;
+-- PASS: 'PASS — gate locked'
+
+
+-- ===================================================================
+-- TEST 10: Idempotency — duplicate step would be caught
+-- ===================================================================
+SELECT
+    CASE
+        WHEN COUNT(*) > 0 THEN 'PASS — already awarded, controller skips'
+        ELSE 'FAIL — not found, would double-award'
+    END AS idempotency_check
+FROM gamification_points_ledger
+WHERE user_id =6 AND action_type = 'onboarding_step_about';
+-- PASS: 'PASS — already awarded, controller skips'
+
+
+-- ===================================================================
+-- TEST 11: UNIQUE constraint — second onboarding row is blocked by DB
+-- This INSERT must ERROR. That error IS the passing result.
+-- ===================================================================
+INSERT INTO gamification_user_challenges (user_id, challenge_id, current_progress, status)
+VALUES (6, 441, 1, 'active');
+-- PASS if: ERROR: duplicate key value violates unique constraint
+
+
+-- ===================================================================
+-- TEST 12: Role change blocked after completion
+-- ===================================================================
+SELECT
+    CASE
+        WHEN status = 'completed' THEN 'PASS — 409 would be returned'
+        ELSE 'FAIL — role change would be allowed'
+    END AS role_guard
+FROM gamification_user_challenges
+WHERE user_id = 6 AND challenge_id = 441;
+-- PASS: 'PASS — 409 would be returned'
+
+
+-- ===================================================================
+-- FINAL SUMMARY — everything in one row
+-- ===================================================================
+SELECT
+    u.email,
+    u.role                                                          AS role_in_users,
+    gup.total_points,
+    gup.current_level,
+    guc.current_progress                                            AS onboarding_step,
+    guc.status                                                      AS onboarding_status,
+    guc.start_date,
+    guc.completed_date,
+    (SELECT COUNT(*)
+     FROM gamification_points_ledger
+     WHERE user_id = 6
+       AND action_type LIKE 'onboarding_step_%')                    AS ledger_entries,
+    (SELECT COALESCE(SUM(points), 0)
+     FROM gamification_points_ledger
+     WHERE user_id = 6
+       AND action_type LIKE 'onboarding_step_%')                    AS total_xp_from_onboarding,
+    (SELECT COUNT(*)
+     FROM gamification_user_badges
+     WHERE user_id = 6)                                          AS badges_held
+FROM users u
+JOIN gamification_user_progress gup     ON gup.user_id = u.id
+JOIN gamification_user_challenges guc   ON guc.user_id = u.id
+JOIN gamification_challenges gc         ON gc.id = guc.challenge_id
+                                       AND gc.challenge_code = 'ONBOARDING'
+WHERE u.id = 6;
+-- PASS if:
+--   role_in_users          = client
+--   total_points           = 550
+--   onboarding_step        = 6
+--   onboarding_status      = completed
+--   completed_date         NOT NULL
+--   ledger_entries         = 4  (about, role, modules, badge — INTRO/DONE have 0 pts so no entry)
+--   total_xp_from_onboarding = 550
+--   badges_held            = 1
+
+SELECT action_type, points, description, created_at
+FROM gamification_points_ledger
+WHERE user_id = 6
+  AND action_type LIKE 'onboarding_step_%'
+ORDER BY created_at;
+
+
+SELECT badge_code, points_awarded FROM gamification_badges WHERE badge_code = 'CHALLENGE_MASTER';
+-- ===================================================================
+-- CLEANUP — uncomment when done inspecting
+-- ===================================================================
+   DELETE FROM users WHERE id = 6;
+-- (CASCADE removes all related rows automatically)
+
+-- Fix the existing dirty ledger entry for user 6
+UPDATE gamification_points_ledger
+SET points = 250,
+    description = 'Onboarding step: BADGE'
+WHERE user_id = 6
+  AND action_type = 'onboarding_step_badge';
+
+
+DELETE FROM gamification_user_challenges
+   WHERE user_id = 6
+     AND challenge_id = (SELECT id FROM gamification_challenges
+                         WHERE challenge_code = 'ONBOARDING');
+
+
+
+SELECT status, current_progress FROM gamification_user_challenges
+      WHERE user_id = 6;
+
+
+
+-- Run this in pgAdmin Query Tool
+SELECT id, email, role, created_at 
+FROM users 
+WHERE id=6
+-- Note down the ID (e.g., 1, 2, 6, etc.)
+
+-- Should show NO onboarding data yet
+SELECT * FROM gamification_user_challenges WHERE user_id = 6;
+SELECT * FROM gamification_points_ledger WHERE user_id = 6 AND action_type LIKE 'onboarding_%';
+SELECT * FROM gamification_user_badges WHERE user_id = 6;
+
+-- Should show a row with current_progress = 1, status = 'active'
+SELECT user_id, challenge_id, current_progress, status, start_date 
+FROM gamification_user_challenges 
+WHERE user_id = 6
+
+-- Should show +50 XP in ledger
+SELECT action_type, points, description, created_at 
+FROM gamification_points_ledger 
+WHERE user_id = 6 
+ORDER BY created_at DESC;
+
+-- Check user 6's complete onboarding state
+SELECT 
+    u.id,
+    u.email,
+    u.role,
+    guc.current_progress,
+    guc.status,
+    guc.completed_date,
+    gup.total_points,
+    gup.current_level,
+    COUNT(DISTINCT gpl.ledger_id) as ledger_entries,
+    SUM(CASE WHEN gpl.action_type LIKE 'onboarding_step_%' THEN gpl.points ELSE 0 END) as onboarding_xp,
+    (SELECT COUNT(*) FROM gamification_user_badges gub 
+     JOIN gamification_badges gb ON gb.id = gub.badge_id 
+     WHERE gub.user_id = u.id) as badge_count
+FROM users u
+LEFT JOIN gamification_user_challenges guc ON guc.user_id = u.id
+LEFT JOIN gamification_user_progress gup ON gup.user_id = u.id
+LEFT JOIN gamification_points_ledger gpl ON gpl.user_id = u.id
+WHERE u.id = 6
+GROUP BY u.id, u.email, u.role, guc.current_progress, guc.status, guc.completed_date, gup.total_points, gup.current_level;
+
+
+-- Create a fresh test user
+INSERT INTO users (email, password_hash, first_name, last_name, role)
+VALUES ('frontend_test@example.com', 'dummy_hash_123', 'Frontend', 'Tester', 'freelancer')
+RETURNING id;
+
+-- Initialize gamification progress
+INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+VALUES (LASTVAL(), 0, 1, 0);
+
+-- Note: Write down the ID returned (e.g., 7, 8, etc.)
+Select * from users
+delete from users
+
+
+-- Reset user 1's onboarding (clean slate)
+DELETE FROM gamification_points_ledger WHERE user_id = 1 AND action_type LIKE 'onboarding_%';
+UPDATE gamification_user_challenges SET status = 'active', current_progress = 1, completed_date = NULL WHERE user_id = 1;
+UPDATE gamification_user_progress SET total_points = 0, activity_count = 0 WHERE user_id = 1;
 

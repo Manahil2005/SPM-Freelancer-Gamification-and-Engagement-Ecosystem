@@ -1,6 +1,30 @@
 // ============================================================
 // controllers/gamificationController.js
 // Module 11 — Gamification Controller
+//
+// ONBOARDING REFACTOR (no new tables):
+//   user_onboarding table REMOVED.
+//   All onboarding state now lives in existing tables:
+//
+//   ┌─────────────────────────┬──────────────────────────────────────────┐
+//   │ Onboarding concept      │ Where it lives now                       │
+//   ├─────────────────────────┼──────────────────────────────────────────┤
+//   │ Has user started?       │ gamification_user_challenges row exists  │
+//   │ Has user completed?     │ guc.status = 'completed'                 │
+//   │ Current step (1-6)      │ guc.current_progress                     │
+//   │ Permanent done gate     │ guc.status='completed'+completed_date    │
+//   │ Selected role           │ users.role (written directly)            │
+//   │ Awarded badge           │ gamification_user_badges (inserted)      │
+//   │ Points accumulated      │ gamification_points_ledger (summed)      │
+//   │ started_at / done_at    │ guc.start_date / guc.completed_date      │
+//   └─────────────────────────┴──────────────────────────────────────────┘
+//
+//   REQUIRED one-time SQL seed (add to SPM_Centralized_Db.sql):
+//   INSERT INTO gamification_challenges
+//       (challenge_code, title, description, target_count, reward_points, expiry_days, challenge_type, action_required)
+//   VALUES
+//       ('ONBOARDING', 'Platform Onboarding', 'Complete the one-time platform onboarding tour', 6, 410, 0, 'onboarding', 'complete_onboarding')
+//   ON CONFLICT (challenge_code) DO NOTHING;
 // ============================================================
 
 const gService = require("../services/gamificationService");
@@ -96,36 +120,56 @@ const handleGetAuditLogs = async (req, res) => {
 };
 
 // ============================================================
+// INTERNAL HELPER — fetch the ONBOARDING challenge id
+// Cached after first call to avoid repeated lookups.
+// ============================================================
+let _onboardingChallengeId = null;
+const _getOnboardingChallengeId = async (client) => {
+    if (_onboardingChallengeId) return _onboardingChallengeId;
+    const res = await (client || db).query(
+        `SELECT id FROM gamification_challenges WHERE challenge_code = 'ONBOARDING' LIMIT 1`
+    );
+    if (res.rows.length === 0) {
+        throw new Error("ONBOARDING challenge not seeded. Run the seed INSERT for gamification_challenges.");
+    }
+    _onboardingChallengeId = res.rows[0].id;
+    return _onboardingChallengeId;
+};
+
+// ============================================================
+// INTERNAL HELPER — fetch a user's onboarding challenge row
+// Returns null if the user has never started onboarding.
+// ============================================================
+const _getOnboardingRow = async (client, userId, challengeId) => {
+    const res = await (client || db).query(
+        `SELECT guc.id, guc.current_progress, guc.status,
+                guc.start_date, guc.completed_date
+         FROM gamification_user_challenges guc
+         WHERE guc.user_id = $1 AND guc.challenge_id = $2`,
+        [userId, challengeId]
+    );
+    return res.rows.length > 0 ? res.rows[0] : null;
+};
+
+// ============================================================
 // WBS 4.2 — ONBOARDING GATE CHECK
 // GET /api/gamification/onboarding/status
 //
-// PURPOSE: Called immediately after login by the frontend.
-// Returns { completed: true/false, currentStep, ... }
-// If completed=true the frontend MUST skip onboarding entirely.
-// If completed=false the frontend shows the onboarding flow.
-//
-// This is the single source of truth for the "once in lifetime"
-// guarantee. The frontend should NEVER show onboarding unless
-// this endpoint returns completed=false.
+// Reads from gamification_user_challenges (challenge_code=ONBOARDING):
+//   - No row           → never started  → completed: false, currentStep: 1
+//   - status=active    → in progress    → completed: false, currentStep: current_progress
+//   - status=completed → done forever   → completed: true
 // ============================================================
 const handleGetOnboardingStatus = async (req, res) => {
     try {
-        const userId = req.userId; // set by auth middleware
+        const userId = req.userId;
+        if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-        if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
-        }
+        const challengeId = await _getOnboardingChallengeId();
+        const row = await _getOnboardingRow(null, userId, challengeId);
 
-        const result = await db.query(
-            `SELECT onboarding_completed, current_step, onboarding_points,
-                    selected_role, awarded_badge_code, started_at, completed_at
-             FROM user_onboarding
-             WHERE user_id = $1`,
-            [userId]
-        );
-
-        if (result.rows.length === 0) {
-            // No row at all → this user has NEVER started onboarding
+        if (!row) {
+            // User has never touched onboarding
             return res.status(200).json({
                 success: true,
                 data: {
@@ -140,17 +184,44 @@ const handleGetOnboardingStatus = async (req, res) => {
             });
         }
 
-        const row = result.rows[0];
+        const completed = row.status === 'completed';
+
+        // Derive totalPoints from ledger
+        const ledgerRes = await db.query(
+            `SELECT COALESCE(SUM(points), 0) AS total
+             FROM gamification_points_ledger
+             WHERE user_id = $1 AND action_type LIKE 'onboarding_step_%'`,
+            [userId]
+        );
+
+        // Derive selectedRole from users table
+        const userRes = await db.query(
+            `SELECT role FROM users WHERE id = $1`,
+            [userId]
+        );
+
+        // Derive most recent onboarding badge from gamification_user_badges
+        // (badges awarded during onboarding have category matching onboarding badge codes)
+        const badgeRes = await db.query(
+            `SELECT gb.badge_code
+             FROM gamification_user_badges gub
+             JOIN gamification_badges gb ON gb.id = gub.badge_id
+             WHERE gub.user_id = $1
+             ORDER BY gub.unlocked_at DESC
+             LIMIT 1`,
+            [userId]
+        );
+
         return res.status(200).json({
             success: true,
             data: {
-                completed:    row.onboarding_completed,
-                currentStep:  row.current_step,
-                totalPoints:  row.onboarding_points,
-                selectedRole: row.selected_role,
-                awardedBadge: row.awarded_badge_code,
-                startedAt:    row.started_at,
-                completedAt:  row.completed_at,
+                completed:    completed,
+                currentStep:  row.current_progress || 1,
+                totalPoints:  parseInt(ledgerRes.rows[0].total),
+                selectedRole: userRes.rows[0]?.role || null,
+                awardedBadge: badgeRes.rows[0]?.badge_code || null,
+                startedAt:    row.start_date,
+                completedAt:  row.completed_date,
             }
         });
 
@@ -167,26 +238,21 @@ const handleGetOnboardingStatus = async (req, res) => {
 // Body: { stepCode: "INTRO"|"ABOUT"|"ROLE"|"MODULES"|"BADGE"|"DONE",
 //         stepData: { ...optional per-step payload } }
 //
-// STEP LOGIC:
-//   INTRO    → creates the onboarding row (idempotent), no points
-//   ABOUT    → +50 XP (viewing "Who We Are")
-//   ROLE     → +100 XP, writes role to users table
-//   MODULES  → +10 XP per module + +50 XP explorer bonus if 5+ modules
-//   BADGE    → +250 XP, awards the badge to gamification_user_badges
-//   DONE     → stamps onboarding_completed=TRUE (PERMANENT GATE), no extra points
+// State machine stored in gamification_user_challenges:
+//   current_progress = step number (1–6)
+//   status           = 'active' | 'completed'
+//   completed_date   = stamped when DONE is sent
 //
-// IDEMPOTENCY: steps can be re-sent safely; points are only
-// awarded once per step (checked via points ledger action_type UNIQUE logic).
+// IDEMPOTENCY: points checked via gamification_points_ledger
+//   action_type = 'onboarding_step_<stepcode>'
 // ============================================================
 const handleCompleteOnboardingStep = async (req, res) => {
     const client = await db.connect();
     try {
-        const userId   = req.userId; // set by auth middleware
+        const userId = req.userId;
         const { stepCode, stepData } = req.body;
 
-        if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
-        }
+        if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
         const VALID_STEPS = ['INTRO', 'ABOUT', 'ROLE', 'MODULES', 'BADGE', 'DONE'];
         if (!VALID_STEPS.includes(stepCode)) {
@@ -195,58 +261,57 @@ const handleCompleteOnboardingStep = async (req, res) => {
 
         await client.query("BEGIN");
 
-        // ── 1. GUARD: if onboarding already completed, reject silently ──
-        const existingRow = await client.query(
-            `SELECT onboarding_completed, current_step FROM user_onboarding WHERE user_id = $1`,
-            [userId]
-        );
+        const challengeId = await _getOnboardingChallengeId(client);
 
-        if (existingRow.rows.length > 0 && existingRow.rows[0].onboarding_completed === true) {
+        // ── 1. GATE: if onboarding already completed, reject silently ──
+        const existingRow = await _getOnboardingRow(client, userId, challengeId);
+
+        if (existingRow && existingRow.status === 'completed') {
             await client.query("ROLLBACK");
-            // Return success so frontend doesn't error, but flag it
             return res.status(200).json({
-                success:  true,
+                success: true,
                 alreadyCompleted: true,
-                message:  "Onboarding already completed. This step was ignored.",
+                message: "Onboarding already completed. This step was ignored.",
                 data: { stepCompleted: stepCode, pointsAwarded: 0, totalOnboardingPoints: 0 }
             });
         }
 
-        // ── 2. Ensure gamification_user_progress row exists ──
-        const progressCheck = await client.query(
-            `SELECT user_id FROM gamification_user_progress WHERE user_id = $1`,
+        // ── 2. UPSERT gamification_user_progress (FIXED) ──
+        // Use INSERT with ON CONFLICT to handle existing rows gracefully
+        await client.query(
+            `INSERT INTO gamification_user_progress
+                 (user_id, total_points, current_level, activity_count)
+             VALUES ($1, 0, 1, 0)
+             ON CONFLICT (user_id) DO NOTHING`,
             [userId]
         );
-        if (progressCheck.rows.length === 0) {
-            await client.query(
-                `INSERT INTO gamification_user_progress
-                     (user_id, total_points, current_level, activity_count)
-                 VALUES ($1, 0, 1, 0)`,
-                [userId]
-            );
-        }
 
-        // ── 3. Ensure user_onboarding row exists (INTRO step creates it) ──
+        // ── 3. Upsert gamification_user_challenges row ──
         const stepToNumber = { INTRO: 1, ABOUT: 2, ROLE: 3, MODULES: 4, BADGE: 5, DONE: 6 };
         const stepNumber = stepToNumber[stepCode];
 
-        if (existingRow.rows.length === 0) {
+        if (!existingRow) {
+            // First call ever — create the row
             await client.query(
-                `INSERT INTO user_onboarding (user_id, current_step, onboarding_points)
-                 VALUES ($1, $2, 0)`,
-                [userId, stepNumber]
+                `INSERT INTO gamification_user_challenges
+                     (user_id, challenge_id, current_progress, status)
+                 VALUES ($1, $2, $3, 'active')
+                 ON CONFLICT (user_id, challenge_id) DO NOTHING`,
+                [userId, challengeId, stepNumber]
             );
         } else {
-            // Only advance step forward, never backward
-            if (stepNumber > existingRow.rows[0].current_step) {
+            // Only advance forward, never backward
+            if (stepNumber > existingRow.current_progress) {
                 await client.query(
-                    `UPDATE user_onboarding SET current_step = $1, updated_at = NOW() WHERE user_id = $2`,
-                    [stepNumber, userId]
+                    `UPDATE gamification_user_challenges
+                     SET current_progress = $1, last_updated = NOW()
+                     WHERE user_id = $2 AND challenge_id = $3`,
+                    [stepNumber, userId, challengeId]
                 );
             }
         }
 
-        // ── 4. IDEMPOTENCY CHECK: has this step already been awarded? ──
+        // ── 4. IDEMPOTENCY: has this step already been awarded points? ──
         const ledgerAction = `onboarding_step_${stepCode.toLowerCase()}`;
         const alreadyAwarded = await client.query(
             `SELECT 1 FROM gamification_points_ledger
@@ -257,10 +322,10 @@ const handleCompleteOnboardingStep = async (req, res) => {
         let pointsAwarded = 0;
 
         if (alreadyAwarded.rows.length === 0) {
-            // ── 5. Calculate points for this step ──
+            // ── 5. Calculate points per step ──
             switch (stepCode) {
                 case 'INTRO':
-                    // No points for intro, just tracking
+                    // No points — just tracking
                     break;
 
                 case 'ABOUT':
@@ -269,89 +334,76 @@ const handleCompleteOnboardingStep = async (req, res) => {
 
                 case 'ROLE':
                     pointsAwarded = 100;
-                    // Write role to users table
                     if (stepData?.role) {
                         const validRoles = ['freelancer', 'client', 'admin'];
                         if (validRoles.includes(stepData.role.toLowerCase())) {
                             await client.query(
-                                `UPDATE users SET role = $1 WHERE id = $2`,
-                                [stepData.role.toLowerCase(), userId]
-                            );
-                            await client.query(
-                                `UPDATE user_onboarding SET selected_role = $1 WHERE user_id = $2`,
+                                `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2`,
                                 [stepData.role.toLowerCase(), userId]
                             );
                         }
                     }
                     break;
 
-                case 'MODULES':
-                    // +10 XP per module explored, +50 bonus for explorer (5+ modules)
+                case 'MODULES': {
                     const moduleCount = parseInt(stepData?.moduleCount) || 0;
                     pointsAwarded = moduleCount * 10;
                     if (stepData?.hasExplorerBonus) pointsAwarded += 50;
                     break;
+                }
 
                 case 'BADGE': {
                     pointsAwarded = 250;
-                    // Award the badge to gamification_user_badges
                     const badgeCode = stepData?.badgeCode || 'CHALLENGE_MASTER';
-                    const badgeRow  = await client.query(
-                        `SELECT id, points_awarded FROM gamification_badges
+                    const badgeRow = await client.query(
+                        `SELECT id FROM gamification_badges
                          WHERE badge_code = $1 AND is_active = TRUE`,
                         [badgeCode]
                     );
                     if (badgeRow.rows.length > 0) {
                         const badge = badgeRow.rows[0];
-                        // Insert (ignore duplicate — user may re-submit)
                         await client.query(
                             `INSERT INTO gamification_user_badges (user_id, badge_id)
                              VALUES ($1, $2) ON CONFLICT (user_id, badge_id) DO NOTHING`,
                             [userId, badge.id]
                         );
-                        // Add badge bonus points on top of the step points
-                        if (badge.points_awarded > 0) {
-                            pointsAwarded += badge.points_awarded;
-                        }
-                        // Record the badge code on the onboarding row
-                        await client.query(
-                            `UPDATE user_onboarding SET awarded_badge_code = $1 WHERE user_id = $2`,
-                            [badgeCode, userId]
-                        );
-                        // Notification
                         await client.query(
                             `INSERT INTO gamification_notifications
                                  (user_id, notification_type, title, message)
                              VALUES ($1, 'badge', $2, $3)`,
                             [userId, 'Badge Unlocked!',
-                             `You earned the "${badgeCode.replace(/_/g,' ')}" badge during onboarding!`]
+                             `You earned the "${badgeCode.replace(/_/g, ' ')}" badge during onboarding!`]
                         );
                     }
                     break;
                 }
 
                 case 'DONE':
-                    // No points — just stamps the permanent gate
                     break;
             }
 
-            // ── 6. Credit points if any ──
+            // ── 6. Credit points if any (FIXED - always update, never insert) ──
             if (pointsAwarded > 0) {
-                await client.query(
+                // Use UPDATE instead of INSERT for points
+                const updateResult = await client.query(
                     `UPDATE gamification_user_progress
                      SET total_points   = total_points + $1,
                          activity_count = activity_count + 1,
                          updated_at     = NOW()
-                     WHERE user_id = $2`,
+                     WHERE user_id = $2
+                     RETURNING total_points`,
                     [pointsAwarded, userId]
                 );
 
-                await client.query(
-                    `UPDATE user_onboarding
-                     SET onboarding_points = onboarding_points + $1, updated_at = NOW()
-                     WHERE user_id = $2`,
-                    [pointsAwarded, userId]
-                );
+                // If update affected no rows, insert (should not happen due to earlier UPSERT)
+                if (updateResult.rows.length === 0) {
+                    await client.query(
+                        `INSERT INTO gamification_user_progress
+                             (user_id, total_points, current_level, activity_count)
+                         VALUES ($1, $2, 1, 1)`,
+                        [userId, pointsAwarded]
+                    );
+                }
 
                 await client.query(
                     `INSERT INTO gamification_points_ledger
@@ -360,7 +412,6 @@ const handleCompleteOnboardingStep = async (req, res) => {
                     [userId, ledgerAction, pointsAwarded, `Onboarding step: ${stepCode}`]
                 );
 
-                // Send points notification for meaningful awards
                 if (['ABOUT', 'ROLE', 'MODULES', 'BADGE'].includes(stepCode)) {
                     await client.query(
                         `INSERT INTO gamification_notifications
@@ -371,43 +422,43 @@ const handleCompleteOnboardingStep = async (req, res) => {
                     );
                 }
             }
-        } // end idempotency block
+        }
 
-        // ── 7. DONE step: stamp the permanent gate ──
+        // ── 7. DONE step: stamp permanent gate ──
         if (stepCode === 'DONE') {
             await client.query(
-                `UPDATE user_onboarding
-                 SET onboarding_completed = TRUE,
-                     completed_at         = NOW(),
-                     current_step         = 6,
-                     updated_at           = NOW()
-                 WHERE user_id = $1`,
-                [userId]
+                `UPDATE gamification_user_challenges
+                 SET status         = 'completed',
+                     completed_date = NOW(),
+                     current_progress = 6,
+                     last_updated   = NOW()
+                 WHERE user_id = $1 AND challenge_id = $2`,
+                [userId, challengeId]
             );
 
-            // Run badge engine one final time — catches RISING_STAR etc.
-            // (async, does not block the response)
             gService.evaluateBadges(userId).catch(err =>
                 console.error("[Badge Engine] Post-onboarding eval failed:", err.message)
             );
         }
 
-        // ── 8. Read final onboarding points for response ──
-        const finalRow = await client.query(
-            `SELECT onboarding_points FROM user_onboarding WHERE user_id = $1`,
+        // ── 8. Read final onboarding points from ledger for response ──
+        const finalPoints = await client.query(
+            `SELECT COALESCE(SUM(points), 0) AS total
+             FROM gamification_points_ledger
+             WHERE user_id = $1 AND action_type LIKE 'onboarding_step_%'`,
             [userId]
         );
-        const totalOnboardingPoints = finalRow.rows[0]?.onboarding_points || 0;
+        const totalOnboardingPoints = parseInt(finalPoints.rows[0].total);
 
         await client.query("COMMIT");
 
         res.status(200).json({
             success: true,
             data: {
-                stepCompleted:         stepCode,
+                stepCompleted: stepCode,
                 pointsAwarded,
                 totalOnboardingPoints,
-                onboardingComplete:    stepCode === 'DONE',
+                onboardingComplete: stepCode === 'DONE',
             }
         });
 
@@ -423,53 +474,43 @@ const handleCompleteOnboardingStep = async (req, res) => {
 // ============================================================
 // WBS 4.2 — SELECT ROLE (standalone endpoint for Step 3)
 // POST /api/gamification/onboarding/select-role
-// Body: { role: "freelancer"|"client"|"admin" }
 //
-// Delegates to complete-step internally with stepCode=ROLE.
-// Kept as a separate endpoint because the frontend calls it
-// independently from the step completion flow.
+// Writes role directly to users.role.
+// Guard: rejects if onboarding challenge row is already 'completed'.
 // ============================================================
 const handleSelectRole = async (req, res) => {
     try {
         const userId = req.userId;
         const { role } = req.body;
 
-        if (!userId) {
-            return res.status(401).json({ success: false, message: "Unauthorized" });
-        }
+        if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
         const validRoles = ['freelancer', 'client', 'admin'];
         if (!role || !validRoles.includes(role.toLowerCase())) {
-            return res.status(400).json({ success: false, message: "Invalid role. Must be freelancer, client, or admin." });
+            return res.status(400).json({
+                success: false,
+                message: "Invalid role. Must be freelancer, client, or admin."
+            });
         }
 
-        // Guard: don't allow role change if onboarding already completed
-        const statusCheck = await db.query(
-            `SELECT onboarding_completed FROM user_onboarding WHERE user_id = $1`,
-            [userId]
-        );
-        if (statusCheck.rows.length > 0 && statusCheck.rows[0].onboarding_completed === true) {
+        // Guard: no role changes after onboarding is completed
+        const challengeId = await _getOnboardingChallengeId();
+        const row = await _getOnboardingRow(null, userId, challengeId);
+        if (row && row.status === 'completed') {
             return res.status(409).json({
                 success: false,
                 message: "Onboarding already completed. Role cannot be changed via onboarding."
             });
         }
 
-        // Update role in users table
+        // Write role to users table
         const result = await db.query(
-            `UPDATE users SET role = $1 WHERE id = $2 RETURNING id, role`,
+            `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2 RETURNING id, role`,
             [role.toLowerCase(), userId]
         );
-
         if (result.rows.length === 0) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
-
-        // Persist selected role on the onboarding row (upsert-safe)
-        await db.query(
-            `UPDATE user_onboarding SET selected_role = $1, updated_at = NOW() WHERE user_id = $2`,
-            [role.toLowerCase(), userId]
-        );
 
         res.status(200).json({
             success:       true,
@@ -487,11 +528,13 @@ const handleSelectRole = async (req, res) => {
 // ============================================================
 // WBS 4.2 — GET ONBOARDING PROGRESS (for mid-session resume)
 // GET /api/gamification/onboarding/:userId/progress
+//
+// Returns overall gamification progress + recent badges.
+// NOTE: userId comes from URL param — used for profile views.
 // ============================================================
 const handleGetOnboardingProgress = async (req, res) => {
     try {
         const userId = parseInt(req.params.userId);
-
         if (isNaN(userId)) {
             return res.status(400).json({ success: false, message: "Invalid userId" });
         }
@@ -516,11 +559,11 @@ const handleGetOnboardingProgress = async (req, res) => {
         res.status(200).json({
             success: true,
             data: {
-                totalPoints:  progress.rows[0]?.total_points   || 0,
-                level:        progress.rows[0]?.current_level  || 1,
-                activityCount:progress.rows[0]?.activity_count || 0,
-                trustScore:   progress.rows[0]?.trust_score    || 0,
-                badges:       badges.rows
+                totalPoints:   progress.rows[0]?.total_points   || 0,
+                level:         progress.rows[0]?.current_level  || 1,
+                activityCount: progress.rows[0]?.activity_count || 0,
+                trustScore:    progress.rows[0]?.trust_score    || 0,
+                badges:        badges.rows
             }
         });
 
@@ -534,16 +577,13 @@ const handleGetOnboardingProgress = async (req, res) => {
 const handleGetOnboarding = handleGetOnboardingProgress;
 
 module.exports = {
-    // Points / Badges / Profile — unchanged
     handleAwardPoints,
     handleGetUserBadges,
     handleGetUserProfile,
     handleGetAuditLogs,
-
-    // Onboarding
     handleGetOnboardingStatus,
     handleCompleteOnboardingStep,
     handleSelectRole,
     handleGetOnboardingProgress,
-    handleGetOnboarding,        
+    handleGetOnboarding,
 };
