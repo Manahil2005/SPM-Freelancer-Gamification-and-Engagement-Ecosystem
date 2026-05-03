@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+
 /* ═══════════════════════════════════════════════════════════════
    THEME — exact tokens from light.html
 ═══════════════════════════════════════════════════════════════ */
@@ -77,6 +78,7 @@ const BADGE_TIERS = [
 /* ═══════════════════════════════════════════════════════════════
    API HELPERS — unchanged
 ═══════════════════════════════════════════════════════════════ */
+const [roleWasPreloaded, setRoleWasPreloaded] = useState(false);
 const API_BASE = "http://localhost:5000";
 // You'll need to get the actual user ID from your auth system
 // For now, let's fetch from localStorage or context
@@ -403,8 +405,17 @@ export default function SPMOnboarding() {
     apiGet("/health").then(d => {
       const ok = !!d;
       setBackendOK(ok);
-      // Only call INTRO once backend is confirmed alive
       if (ok) {
+        // Pre-fetch existing role so Step 3 highlights it
+        apiGet("/api/gamification/onboarding/status").then(res => {
+          if (res?.success && res.data?.selectedRole) {
+            setRole(res.data.selectedRole.charAt(0).toUpperCase() + 
+                    res.data.selectedRole.slice(1)); // "freelancer" → "Freelancer"
+                    setRole(formatted);
+                    setRoleWasPreloaded(true); 
+          }
+        });
+
         apiPost("/api/gamification/onboarding/complete-step", {
           stepCode: "INTRO"
         }).then(result => {
