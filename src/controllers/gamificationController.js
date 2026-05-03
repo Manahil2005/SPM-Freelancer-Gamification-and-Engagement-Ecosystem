@@ -102,6 +102,36 @@ const handleGetUserProfile = async (req, res) => {
 };
 
 // ============================================================
+// GET USER ROLE — For onboarding Step 3
+// GET /api/users/:userId/role
+// ============================================================
+const handleGetUserRole = async (req, res) => {
+    try {
+        const userId = parseInt(req.params.userId);
+        if (isNaN(userId)) {
+            return res.status(400).json({ success: false, message: "Invalid userId" });
+        }
+        
+        const result = await db.query(
+            `SELECT id, email, role FROM users WHERE id = $1`,
+            [userId]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+        
+        res.status(200).json({
+            success: true,
+            role: result.rows[0].role
+        });
+    } catch (error) {
+        console.error("[GetUserRole] Error:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+// ============================================================
 // WBS 5.1.2 — Admin: Get Audit Logs
 // GET /api/gamification/admin/audit-logs
 // ============================================================
@@ -335,7 +365,7 @@ const handleCompleteOnboardingStep = async (req, res) => {
                 case 'ROLE':
                     pointsAwarded = 100;
                     if (stepData?.role) {
-                        const validRoles = ['freelancer', 'client', 'admin'];
+                        const validRoles = ['freelancer', 'client', 'admin', 'moderator'];
                         if (validRoles.includes(stepData.role.toLowerCase())) {
                             await client.query(
                                 `UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2`,
@@ -486,11 +516,11 @@ const handleSelectRole = async (req, res) => {
 
         if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-        const validRoles = ['freelancer', 'client', 'admin'];
+        const validRoles = ['freelancer', 'client', 'admin','moderator'];
         if (!role || !validRoles.includes(role.toLowerCase())) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid role. Must be freelancer, client, or admin."
+                message: "Invalid role. Must be freelancer, client, admin, or moderator."
             });
         }
 
@@ -603,6 +633,7 @@ module.exports = {
     handleAwardPoints,
     handleGetUserBadges,
     handleGetUserProfile,
+    handleGetUserRole,        // ADDED THIS LINE
     handleGetAuditLogs,
     handleGetOnboardingStatus,
     handleCompleteOnboardingStep,

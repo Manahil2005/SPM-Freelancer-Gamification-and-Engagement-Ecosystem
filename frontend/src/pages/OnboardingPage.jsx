@@ -1090,7 +1090,44 @@ export default function SPMOnboarding() {
 
   const Step3 = () => {
     const [hovRole, setHovRole] = useState(null);
+    const [existingRole, setExistingRole] = useState(null);
+    const [loadingRole, setLoadingRole] = useState(true);
 
+    // Fetch user's existing role on mount
+    useEffect(() => {
+      const fetchUserRole = async () => {
+        try {
+          const userId = getCurrentUserId();
+          const response = await fetch(`${API_BASE}/api/users/${userId}/role`, {
+            headers: { "x-user-id": userId.toString() }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.role) {
+              // Map DB role to display role name
+              const roleMap = {
+                'freelancer': 'Freelancer',
+                'client': 'Client',
+                'moderator': 'Moderator',
+                'admin': 'Admin'
+              };
+              const matchedRole = roleMap[data.role.toLowerCase()];
+              if (matchedRole) {
+                setExistingRole(matchedRole);
+                setRole(matchedRole); // Set the role in parent state
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Failed to fetch user role:", error);
+        } finally {
+          setLoadingRole(false);
+        }
+      };
+      fetchUserRole();
+    }, []);
+
+    // Update ROLES to include Client (matching DB)
     const ROLES = [
       {
         r: "Freelancer", icon: "💼",
@@ -1098,6 +1135,7 @@ export default function SPMOnboarding() {
         badge: "Pathfinder Badge",
         accent: "#0f6e56", accentLight: "#e0faf7", border: "#6bd8cb",
         xpColor: "#0f6e56", xpBg: "#e0faf7",
+        dbRole: "freelancer",
         perks: ["Build a verified portfolio", "Earn skill certificates", "Compete on leaderboards"],
         illu: (isHov, isSel) => (
           <svg viewBox="0 0 160 100" width="100%" height="90" style={{ overflow: "visible" }}>
@@ -1107,13 +1145,11 @@ export default function SPMOnboarding() {
                 <stop offset="100%" stopColor="#0f6e56" />
               </linearGradient>
             </defs>
-            {/* Laptop */}
             <rect x="40" y="32" width="80" height="50" rx="5" fill={isHov ? "url(#flGrad)" : "none"} stroke="#6bd8cb" strokeWidth="1.5"
               style={{ transition: "fill .3s" }} />
             <rect x="44" y="36" width="72" height="40" rx="2" fill={isHov ? "rgba(0,27,24,.6)" : "rgba(0,27,24,.3)"}
               style={{ transition: "fill .3s" }} />
             <rect x="30" y="82" width="100" height="5" rx="2.5" fill="#6bd8cb" opacity=".5" />
-            {/* Screen content */}
             {isHov && <>
               <rect x="50" y="40" width="30" height="3" rx="1.5" fill="#89f5e7" opacity=".8" />
               <rect x="50" y="46" width="50" height="2" rx="1" fill="rgba(255,255,255,.3)" />
@@ -1121,7 +1157,6 @@ export default function SPMOnboarding() {
               <rect x="50" y="61" width="22" height="8" rx="3" fill="#6bd8cb" />
               <text x="61" y="67.5" textAnchor="middle" fontSize="5" fontWeight="800" fill="#001736">APPLY</text>
             </>}
-            {/* Floating badges */}
             {[["🎯", 22, 25], ["📜", 138, 30], ["⭐", 25, 65]].map(([em, x, y], i) => (
               <text key={i} x={x} y={y} textAnchor="middle" fontSize={isHov ? 13 : 9}
                 style={{ transition: `font-size .3s ${i * .08}s`, animation: isHov ? `illuFloat ${1.8 + i * .3}s ${i * .2}s ease-in-out infinite` : "none" }}>{em}</text>
@@ -1130,13 +1165,13 @@ export default function SPMOnboarding() {
         ),
       },
       {
-        r: "Moderator", icon: "🛡️",
-        // Moderators review content, resolve disputes, and ensure platform quality
-        desc: "Review submissions, resolve disputes, and keep the platform standards high.",
-        badge: "Moderator Badge",
+        r: "Client", icon: "📋",
+        desc: "Post projects, hire talent, and build your business.",
+        badge: "Client Badge",
         accent: "#264778", accentLight: "#dbe8ff", border: "#a9c7ff",
         xpColor: "#264778", xpBg: "#dbe8ff",
-        perks: ["Review project submissions", "Mediate freelancer disputes", "Enforce platform quality"],
+        dbRole: "client",
+        perks: ["Post job opportunities", "Hire verified freelancers", "Manage multiple projects"],
         illu: (isHov) => (
           <svg viewBox="0 0 160 100" width="100%" height="90" style={{ overflow: "visible" }}>
             <defs>
@@ -1145,15 +1180,42 @@ export default function SPMOnboarding() {
                 <stop offset="100%" stopColor="#264778" />
               </linearGradient>
             </defs>
-            {/* Moderator shield + review checkmarks */}
-            <rect x="55" y="20" width="50" height="64" rx="4" fill={isHov ? "url(#clGrad)" : "none"} stroke="#a9c7ff" strokeWidth="1.5"
+            <rect x="50" y="25" width="60" height="55" rx="5" fill={isHov ? "url(#clGrad)" : "none"} stroke="#a9c7ff" strokeWidth="1.5"
+              style={{ transition: "fill .3s" }} />
+            <rect x="58" y="33" width="44" height="6" rx="2" fill={isHov ? "#89f5e7" : "rgba(255,255,255,.2)"} />
+            <rect x="58" y="44" width="44" height="6" rx="2" fill={isHov ? "#fcd34d" : "rgba(255,255,255,.15)"} />
+            <rect x="58" y="55" width="30" height="6" rx="2" fill={isHov ? "#f9a8d4" : "rgba(255,255,255,.1)"} />
+            {isHov && [["💼", 28, 40], ["💰", 135, 35], ["📊", 130, 65], ["🤝", 25, 70]].map(([em, x, y], i) => (
+              <text key={i} x={x} y={y} textAnchor="middle" fontSize="12"
+                style={{ animation: `illuFloat ${1.6 + i * .25}s ${i * .15}s ease-in-out infinite` }}>{em}</text>
+            ))}
+          </svg>
+        ),
+      },
+      {
+        r: "Moderator", icon: "🛡️",
+        desc: "Review submissions, resolve disputes, and keep the platform standards high.",
+        badge: "Moderator Badge",
+        accent: "#0f6e56", accentLight: "#e0faf7", border: "#6bd8cb",
+        xpColor: "#0f6e56", xpBg: "#e0faf7",
+        dbRole: "moderator",
+        perks: ["Review project submissions", "Mediate freelancer disputes", "Enforce platform quality"],
+        illu: (isHov) => (
+          <svg viewBox="0 0 160 100" width="100%" height="90" style={{ overflow: "visible" }}>
+            <defs>
+              <linearGradient id="modGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#6bd8cb" />
+                <stop offset="100%" stopColor="#0f6e56" />
+              </linearGradient>
+            </defs>
+            <rect x="55" y="20" width="50" height="64" rx="4" fill={isHov ? "url(#modGrad)" : "none"} stroke="#6bd8cb" strokeWidth="1.5"
               style={{ transition: "fill .3s" }} />
             {[[63, 28], [80, 28], [97, 28], [63, 42], [80, 42], [97, 42], [63, 56], [80, 56], [97, 56]].map(([wx, wy], i) => (
               <rect key={i} x={wx} y={wy} width="9" height="7" rx="1.5"
                 fill={isHov ? ["#89f5e7", "#fcd34d", "#f9a8d4", "#86efac", "#a9c7ff", "#fdba74", "#c4b5fd", "#7dd3fc", "#89f5e7"][i] : "rgba(255,255,255,.15)"}
                 opacity={isHov ? 1 : .6} style={{ transition: `fill .25s ${i * .04}s` }} />
             ))}
-            <rect x="73" y="70" width="14" height="14" rx="2" fill={isHov ? "#001736" : "rgba(255,255,255,.1)"} stroke="#a9c7ff" strokeWidth="1"
+            <rect x="73" y="70" width="14" height="14" rx="2" fill={isHov ? "#001736" : "rgba(255,255,255,.1)"} stroke="#6bd8cb" strokeWidth="1"
               style={{ transition: "fill .3s" }} />
             {isHov && [["⚖️", 30, 35], ["✅", 130, 30], ["🔍", 135, 65], ["📋", 25, 65]].map(([em, x, y], i) => (
               <text key={i} x={x} y={y} textAnchor="middle" fontSize="12"
@@ -1163,11 +1225,12 @@ export default function SPMOnboarding() {
         ),
       },
       {
-        r: "Admin", icon: "🛡️",
+        r: "Admin", icon: "👑",
         desc: "Govern, moderate, and manage the entire platform.",
         badge: "Guardian Badge",
         accent: "#7c1fa8", accentLight: "#f3e0ff", border: "#c07fd0",
         xpColor: "#7c1fa8", xpBg: "#f3e0ff",
+        dbRole: "admin",
         perks: ["Full platform oversight", "Dispute resolution tools", "System analytics access"],
         illu: (isHov) => (
           <svg viewBox="0 0 160 100" width="100%" height="90" style={{ overflow: "visible" }}>
@@ -1177,19 +1240,15 @@ export default function SPMOnboarding() {
                 <stop offset="100%" stopColor="#7c1fa8" />
               </linearGradient>
             </defs>
-            {/* Shield */}
             <path d={`M80 10L112 22L112 ${isHov ? 58 : 54}Q112 ${isHov ? 80 : 76} 80 ${isHov ? 92 : 88}Q48 ${isHov ? 80 : 76} 48 ${isHov ? 58 : 54}L48 22Z`}
               fill={isHov ? "url(#adGrad)" : "none"} stroke="#c07fd0" strokeWidth="1.8"
               style={{ transition: "all .4s cubic-bezier(.34,1.56,.64,1)" }} />
-            {/* Star in shield */}
             <text x="80" y={isHov ? 57 : 54} textAnchor="middle" fontSize={isHov ? 22 : 16}
-              style={{ transition: "all .3s", animation: isHov ? "illuBob 2s ease-in-out infinite" : "none" }}>⭐</text>
-            {/* Orbiting admin tools */}
+              style={{ transition: "all .3s", animation: isHov ? "illuBob 2s ease-in-out infinite" : "none" }}>👑</text>
             {isHov && [["🔍", 28, 22], ["⚖️", 132, 22], ["📊", 28, 70], ["🔔", 132, 68], ["🛡️", 80, 12]].map(([em, x, y], i) => (
               <text key={i} x={x} y={y} textAnchor="middle" fontSize="12"
                 style={{ animation: `illuFloat ${1.5 + i * .2}s ${i * .18}s ease-in-out infinite` }}>{em}</text>
             ))}
-            {/* Glow rings */}
             {isHov && [22, 34, 46].map((r, i) => (
               <circle key={i} cx="80" cy="52" r={r} fill="none" stroke="#c07fd0"
                 strokeWidth=".5" opacity={.15 - i * .04}
@@ -1200,120 +1259,166 @@ export default function SPMOnboarding() {
       },
     ];
 
+    if (loadingRole) {
+      return (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", background: T.surface }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+            <div style={{ width: 32, height: 32, border: `3px solid ${T.surfaceHigh}`, borderTopColor: T.primary, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            <span style={{ fontSize: 12, color: T.textMuted }}>Loading your profile...</span>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div key={paneKey} className="pane" style={{ flex: 1, overflowY: "auto", padding: "18px 22px 10px", background: T.surface, display: "flex", justifyContent: "center" }}>
-        <div style={{ width: "100%", maxWidth: 680 }}>
-        <style>{`
-          @keyframes roleIn { from{opacity:0;transform:translateY(12px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
-          @keyframes perkIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
-          @keyframes selPulse { 0%,100%{box-shadow:0 0 0 0 rgba(107,216,203,.4)} 50%{box-shadow:0 0 0 6px rgba(107,216,203,0)} }
-        `}</style>
+        <div style={{ width: "100%", maxWidth: 900 }}>
+          <style>{`
+            @keyframes roleIn { from{opacity:0;transform:translateY(12px) scale(.96)} to{opacity:1;transform:translateY(0) scale(1)} }
+            @keyframes perkIn { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:translateX(0)} }
+            @keyframes selPulse { 0%,100%{box-shadow:0 0 0 0 rgba(107,216,203,.4)} 50%{box-shadow:0 0 0 6px rgba(107,216,203,0)} }
+          `}</style>
 
-        {/* Header */}
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
-            <div style={{ width: 3, height: 18, background: "#f0c060", borderRadius: 2 }} />
-            <span style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, letterSpacing: ".18em", textTransform: "uppercase" }}>Step 3 of 6</span>
-            {/* +100 XP reward pill — light blue card, gold value, matches the XP badge design */}
-            <div style={{
-              display: "inline-flex", flexDirection: "column", alignItems: "center",
-              background: "#deeaf8", borderRadius: 8,
-              padding: "3px 9px 4px", lineHeight: 1, gap: 1,
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
-            }}>
-              <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 800, color: "#b87c00" }}>+100</span>
-              <span style={{ fontSize: 7, fontWeight: 700, color: "#7a9dbf", textTransform: "uppercase", letterSpacing: ".08em" }}>XP</span>
+          {/* Header */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
+              <div style={{ width: 3, height: 18, background: "#f0c060", borderRadius: 2 }} />
+              <span style={{ fontSize: 8.5, fontWeight: 700, color: T.secondary, letterSpacing: ".18em", textTransform: "uppercase" }}>Step 3 of 6</span>
+              {!existingRole && (
+                <div style={{
+                  display: "inline-flex", flexDirection: "column", alignItems: "center",
+                  background: "#deeaf8", borderRadius: 8,
+                  padding: "3px 9px 4px", lineHeight: 1, gap: 1,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7)",
+                }}>
+                  <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 800, color: "#b87c00" }}>+100</span>
+                  <span style={{ fontSize: 7, fontWeight: 700, color: "#7a9dbf", textTransform: "uppercase", letterSpacing: ".08em" }}>XP</span>
+                </div>
+              )}
+              {existingRole && (
+                <div style={{
+                  display: "inline-flex", alignItems: "center", gap: 4,
+                  background: "#e0faf7", borderRadius: 8,
+                  padding: "3px 9px",
+                }}>
+                  <span style={{ fontSize: 9 }}>✅</span>
+                  <span style={{ fontSize: 8, fontWeight: 700, color: "#0f6e56" }}>Role already selected</span>
+                </div>
+              )}
+            </div>
+            <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 22, fontWeight: 900, color: T.primary, lineHeight: 1.18, marginBottom: 4 }}>
+              Choose your <span style={{ color: T.tertiaryFixedDim }}>role</span>
+            </div>
+            <div style={{ fontSize: 11, color: T.onSurfaceVar }}>
+              {!existingRole 
+                ? "Hover to explore each role. Click to select and earn +100 XP."
+                : `You are already registered as a ${existingRole}. Your role cannot be changed after onboarding.`}
             </div>
           </div>
-          <div style={{ fontFamily: "Manrope,sans-serif", fontSize: 22, fontWeight: 900, color: T.primary, lineHeight: 1.18, marginBottom: 4 }}>
-            Choose your <span style={{ color: T.tertiaryFixedDim }}>role</span>
-          </div>
-          <div style={{ fontSize: 11, color: T.onSurfaceVar }}>Hover to explore each role. Click to select and earn <strong style={{ color: "#b87400" }}>+100 XP</strong>.</div>
-        </div>
 
-        {/* Role cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9, marginBottom: 12 }}>
-          {ROLES.map((item, i) => {
-            const isSel = role === item.r;
-            const isHov = hovRole === i;
-            const active = isHov || isSel;
-            return (
-              <div key={item.r}
-                onClick={() => { if (!isSel) { setRole(item.r); setXp(x => x + 100); } }}
-                onMouseEnter={() => setHovRole(i)}
-                onMouseLeave={() => setHovRole(null)}
-                style={{
-                  border: `2px solid ${isSel ? item.accent : (isHov ? item.border : T.outlineVar)}`,
-                  borderRadius: 14,
-                  overflow: "hidden",
-                  cursor: "pointer",
-                  background: active ? item.accentLight : T.surfaceLowest,
-                  transition: "all .3s cubic-bezier(.34,1.56,.64,1)",
-                  transform: isSel ? "translateY(-4px) scale(1.02)" : isHov ? "translateY(-2px)" : "none",
-                  boxShadow: isSel ? `0 10px 30px ${item.border}55` : isHov ? `0 5px 18px ${item.border}33` : "0 1px 4px rgba(0,23,54,.06)",
-                  animation: `roleIn .4s ${i * .1}s both`,
-                }}
-              >
-                {/* Illustration zone */}
-                <div style={{ background: active ? `linear-gradient(160deg,${item.accentLight},rgba(255,255,255,0))` : T.surfaceLow, padding: "8px 8px 0", transition: "background .3s", minHeight: 100 }}>
-                  {item.illu(active, isSel)}
-                </div>
-
-                {/* Card body */}
-                <div style={{ padding: "6px 11px 11px" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <span style={{ fontSize: 16, transition: "transform .3s", transform: active ? "scale(1.15) rotate(-5deg)" : "none", display: "inline-block" }}>{item.icon}</span>
-                      <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 900, color: active ? item.accent : T.primary, textTransform: "uppercase", letterSpacing: ".05em", transition: "color .25s" }}>{item.r}</span>
-                    </div>
-                    {isSel && <div style={{ width: 16, height: 16, borderRadius: "50%", background: item.accent, display: "flex", alignItems: "center", justifyContent: "center", animation: "selPulse 2s infinite" }}>
-                      <svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.2 6 8 1" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
-                    </div>}
+          {/* Role cards - responsive grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 9, marginBottom: 12 }}>
+            {ROLES.map((item, i) => {
+              const isSel = role === item.r;
+              const isHov = hovRole === i;
+              const active = isHov || isSel;
+              const isDisabled = existingRole !== null && existingRole !== item.r;
+              
+              return (
+                <div key={item.r}
+                  onClick={() => { 
+                    if (!isDisabled && !existingRole && !isSel) { 
+                      setRole(item.r); 
+                      setXp(x => x + 100); 
+                    } 
+                  }}
+                  onMouseEnter={() => !isDisabled && setHovRole(i)}
+                  onMouseLeave={() => setHovRole(null)}
+                  style={{
+                    border: `2px solid ${isSel ? item.accent : (isHov ? item.border : T.outlineVar)}`,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    cursor: isDisabled ? "not-allowed" : "pointer",
+                    background: active ? item.accentLight : T.surfaceLowest,
+                    transition: "all .3s cubic-bezier(.34,1.56,.64,1)",
+                    transform: isSel ? "translateY(-4px) scale(1.02)" : isHov ? "translateY(-2px)" : "none",
+                    boxShadow: isSel ? `0 10px 30px ${item.border}55` : isHov ? `0 5px 18px ${item.border}33` : "0 1px 4px rgba(0,23,54,.06)",
+                    animation: `roleIn .4s ${i * .1}s both`,
+                    opacity: isDisabled ? 0.6 : 1,
+                    filter: isDisabled ? "grayscale(0.2)" : "none",
+                  }}
+                >
+                  {/* Illustration zone */}
+                  <div style={{ background: active ? `linear-gradient(160deg,${item.accentLight},rgba(255,255,255,0))` : T.surfaceLow, padding: "8px 8px 0", transition: "background .3s", minHeight: 100 }}>
+                    {item.illu(active, isSel)}
                   </div>
 
-                  <div style={{ fontSize: 9, color: T.onSurfaceVar, lineHeight: 1.55, marginBottom: 7 }}>{item.desc}</div>
-
-                  {/* Perks — slide in on hover/select */}
-                  <div style={{ height: active ? item.perks.length * 18 : 0, overflow: "hidden", transition: "height .35s cubic-bezier(.34,1.56,.64,1)" }}>
-                    {item.perks.map((p, j) => (
-                      <div key={j} style={{
-                        display: "flex", alignItems: "center", gap: 5, marginBottom: 2,
-                        animation: active ? `perkIn .3s ${j * .07 + .1}s both` : "none"
-                      }}>
-                        <div style={{ width: 4, height: 4, borderRadius: "50%", background: item.border, flexShrink: 0 }} />
-                        <span style={{ fontSize: 8.5, color: item.accent, fontWeight: 600 }}>{p}</span>
+                  {/* Card body */}
+                  <div style={{ padding: "6px 11px 11px" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ fontSize: 16, transition: "transform .3s", transform: active ? "scale(1.15) rotate(-5deg)" : "none", display: "inline-block" }}>{item.icon}</span>
+                        <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 12, fontWeight: 900, color: active ? item.accent : T.primary, textTransform: "uppercase", letterSpacing: ".05em", transition: "color .25s" }}>{item.r}</span>
                       </div>
-                    ))}
-                  </div>
+                      {isSel && !isDisabled && <div style={{ width: 16, height: 16, borderRadius: "50%", background: item.accent, display: "flex", alignItems: "center", justifyContent: "center", animation: "selPulse 2s infinite" }}>
+                        <svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.2 6 8 1" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+                      </div>}
+                      {existingRole === item.r && !isSel && (
+                        <div style={{ width: 16, height: 16, borderRadius: "50%", background: item.accent, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="9" height="7" viewBox="0 0 9 7"><path d="M1 3.5L3.2 6 8 1" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none" /></svg>
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Badge pill */}
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6,
-                    background: active ? item.xpBg : T.surfaceContainer,
-                    border: `1px solid ${active ? item.border : T.outlineVar}`,
-                    borderRadius: 6, padding: "3px 7px", transition: "all .25s",
-                  }}>
-                    <span style={{ fontSize: 8 }}>🏅</span>
-                    <span style={{ fontSize: 7.5, fontWeight: 700, color: active ? item.xpColor : T.secondary, letterSpacing: ".04em" }}>{item.badge}</span>
+                    <div style={{ fontSize: 9, color: T.onSurfaceVar, lineHeight: 1.55, marginBottom: 7 }}>{item.desc}</div>
+
+                    {/* Perks — slide in on hover/select */}
+                    <div style={{ height: active ? item.perks.length * 18 : 0, overflow: "hidden", transition: "height .35s cubic-bezier(.34,1.56,.64,1)" }}>
+                      {item.perks.map((p, j) => (
+                        <div key={j} style={{
+                          display: "flex", alignItems: "center", gap: 5, marginBottom: 2,
+                          animation: active ? `perkIn .3s ${j * .07 + .1}s both` : "none"
+                        }}>
+                          <div style={{ width: 4, height: 4, borderRadius: "50%", background: item.border, flexShrink: 0 }} />
+                          <span style={{ fontSize: 8.5, color: item.accent, fontWeight: 600 }}>{p}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Badge pill */}
+                    <div style={{
+                      display: "inline-flex", alignItems: "center", gap: 4, marginTop: 6,
+                      background: active ? item.xpBg : T.surfaceContainer,
+                      border: `1px solid ${active ? item.border : T.outlineVar}`,
+                      borderRadius: 6, padding: "3px 7px", transition: "all .25s",
+                    }}>
+                      <span style={{ fontSize: 8 }}>🏅</span>
+                      <span style={{ fontSize: 7.5, fontWeight: 700, color: active ? item.xpColor : T.secondary, letterSpacing: ".04em" }}>{item.badge}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
 
-        {/* Mission strip */}
-        <div style={{ background: `linear-gradient(90deg,${T.surfaceContainer},${T.secondaryContainer})`, border: `1px solid ${T.secondaryContainer}`, borderRadius: 10, padding: "9px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 30, height: 30, borderRadius: 8, background: T.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14 }}>📋</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 9, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 1 }}>Mission</div>
-            <div style={{ fontSize: 10, fontWeight: 600, color: T.primaryContainer }}>Select your role to unlock your personalised dashboard path</div>
+          {/* Mission strip */}
+          <div style={{ background: `linear-gradient(90deg,${T.surfaceContainer},${T.secondaryContainer})`, border: `1px solid ${T.secondaryContainer}`, borderRadius: 10, padding: "9px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 30, height: 30, borderRadius: 8, background: T.primary, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14 }}>📋</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: T.primary, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 1 }}>Mission</div>
+              <div style={{ fontSize: 10, fontWeight: 600, color: T.primaryContainer }}>
+                {!existingRole 
+                  ? "Select your role to unlock your personalised dashboard path"
+                  : `You are registered as ${existingRole}. Proceed to continue your onboarding.`}
+              </div>
+            </div>
+            {!existingRole && (
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
+                <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 13, fontWeight: 900, color: "#b87400" }}>+100</span>
+                <span style={{ fontSize: 7, fontWeight: 700, color: "#b87400", letterSpacing: ".1em" }}>XP</span>
+              </div>
+            )}
           </div>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0 }}>
-            <span style={{ fontFamily: "Manrope,sans-serif", fontSize: 13, fontWeight: 900, color: "#b87400" }}>+100</span>
-            <span style={{ fontSize: 7, fontWeight: 700, color: "#b87400", letterSpacing: ".1em" }}>XP</span>
-          </div>
-        </div>
         </div>
       </div>
     );

@@ -5,7 +5,8 @@ import { useState, useEffect, useCallback } from "react";
 // =============================================================
 
 const API_BASE = "";
-const CURRENT_USER_ID = "1";
+// FIX 1: parse to number so === comparisons with DB user_id (number) work correctly
+const CURRENT_USER_ID = parseInt(import.meta.env.VITE_USER_ID || "1", 10);
 
 const C = {
   navBg: "#001736",
@@ -262,7 +263,6 @@ function Sidebar() {
   );
 }
 
-// ── Notification Panel — with ✕ delete button ─────────────────
 function NotificationPanel({ notifications, onMarkRead, onMarkAll, onDelete, onClose }) {
   const typeIcon = { points: "⭐", level: "⬆️", badge: "🏅", challenge: "🎯" };
   return (
@@ -330,17 +330,25 @@ export default function LeaderboardPage() {
   const [showPanel,     setShowPanel]     = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
 
+  // FIX 2: added console.log to surface silent failures, and proper error logging
   const fetchLeaderboard = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const res  = await fetch(`${API_BASE}/api/leaderboard?period=${period}&limit=50`, { headers: { "x-user-id": CURRENT_USER_ID } });
+      const res = await fetch(`${API_BASE}/api/leaderboard?period=${period}&limit=50`, {
+        headers: { "x-user-id": String(CURRENT_USER_ID) }
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      console.log("[Leaderboard] API response:", data);
       if (!data.success) throw new Error(data.error);
       setLeaderboard(data.data || []);
       setLastRefreshed(data.lastRefreshed);
-    } catch (err) { setError(`Could not load leaderboard: ${err.message}`); }
-    finally { setLoading(false); }
+    } catch (err) {
+      setError(`Could not load leaderboard: ${err.message}`);
+      console.error("[Leaderboard] fetch error:", err);
+    } finally {
+      setLoading(false);
+    }
   }, [period]);
 
   const fetchNotifications = useCallback(async () => {

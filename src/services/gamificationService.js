@@ -56,41 +56,35 @@ const awardPoints = async (userId, actionType, points) => {
     const client = await db.connect();
     try {
         await client.query("BEGIN");
-        
-        // ✅ Ensure user has progress row BEFORE updating
+
         await ensureUserProgress(userId, client);
-        
-        // WBS 2.5.2 / 2.5.3: Validate points are positive
+
         if (points <= 0) throw new Error("Invalid point value");
 
         const userRes = await client.query(
             `UPDATE gamification_user_progress
-             SET total_points      = total_points + $1,
-                 activity_count    = activity_count + 1,
+             SET total_points       = total_points + $1,
+                 activity_count     = activity_count + 1,
                  last_activity_date = CURRENT_DATE,
-                 updated_at        = NOW()
+                 updated_at         = NOW()
              WHERE user_id = $2
              RETURNING *`,
             [points, userId]
         );
 
-      if (userRes.rows.length === 0) {
-        await client.query(
-            `INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
-            VALUES ($1, $2, 1, 1)
-            ON CONFLICT (user_id) DO NOTHING`,
-            [userId, points]
-        );
-        await client.query(
-            `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
-            VALUES ($1, $2, $3, $4)`,
-            [userId, actionType, points, `Points awarded for: ${actionType}`]
-        );
-        await client.query("COMMIT");
-        return { total_points: points, level: 1 };
-    }
-
-        const user = userRes.rows[0];
+        // fallback insert if row still missing
+        let user;
+        if (userRes.rows.length === 0) {
+            await client.query(
+                `INSERT INTO gamification_user_progress (user_id, total_points, current_level, activity_count)
+                 VALUES ($1, $2, 1, 1)
+                 ON CONFLICT (user_id) DO NOTHING`,
+                [userId, points]
+            );
+            user = { total_points: points, current_level: 1 };
+        } else {
+            user = userRes.rows[0];
+        }
 
         await client.query(
             `INSERT INTO gamification_points_ledger (user_id, action_type, points, description)
@@ -98,10 +92,16 @@ const awardPoints = async (userId, actionType, points) => {
             [userId, actionType, points, `Points awarded for: ${actionType}`]
         );
 
-        // WBS 3.1 — Keep weekly_points_log in sync so the weekly leaderboard stays current
+        // FIX: use CURRENT_DATE - ISODOW offset so week_start is always local Monday
+        // regardless of server timezone vs UTC
         await client.query(
             `INSERT INTO gamification_weekly_points_log (user_id, week_start, points_earned, activity_count)
-             VALUES ($1, DATE_TRUNC('week', NOW())::DATE, $2, 1)
+             VALUES (
+               $1,
+               CURRENT_DATE - (EXTRACT(ISODOW FROM CURRENT_DATE)::INT - 1),
+               $2,
+               1
+             )
              ON CONFLICT (user_id, week_start)
              DO UPDATE SET
                  points_earned  = gamification_weekly_points_log.points_earned  + EXCLUDED.points_earned,
@@ -110,12 +110,12 @@ const awardPoints = async (userId, actionType, points) => {
             [userId, points]
         );
 
-        // WBS 2.3.1 — Level Advancement Logic
+        // Level advancement
         const levelRes = await client.query(
             `SELECT level_number, title FROM gamification_level_definitions
-            WHERE min_points <= $1
-            ORDER BY min_points DESC
-            LIMIT 1`,
+             WHERE min_points <= $1
+             ORDER BY min_points DESC
+             LIMIT 1`,
             [user.total_points]
         );
         const newLevel = levelRes.rows.length > 0 ? levelRes.rows[0].level_number : 1;
@@ -126,7 +126,6 @@ const awardPoints = async (userId, actionType, points) => {
                 `UPDATE gamification_user_progress SET current_level = $1 WHERE user_id = $2`,
                 [newLevel, userId]
             );
-
             await _createNotification(client, {
                 userId,
                 type:    "level_up",
@@ -136,7 +135,7 @@ const awardPoints = async (userId, actionType, points) => {
         }
 
         await client.query("COMMIT");
-        await forceRefresh(); // ← bust the leaderboard cache immediately
+        await forceRefresh();
         return { total_points: user.total_points, level: newLevel, points_awarded: points };
     } catch (e) {
         await client.query("ROLLBACK");

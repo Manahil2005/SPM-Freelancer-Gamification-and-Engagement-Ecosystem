@@ -20,6 +20,7 @@ const leaderboardService  = require("./services/leaderboardService");
 const gamificationRoutes  = require("./routes/gamification");
 const challengeRoutes     = require("./routes/challenges");          // ✅ WBS 2.4
 const adminConfigRoutes   = require("./routes/adminConfig"); 
+const gamificationController = require("./controllers/gamificationController");
 
 // ✅ WBS 2.2.1 — Badge + Onboarding seeder (runs once on startup)
 // ✅ WBS 2.4   — Timed challenge seeder
@@ -56,6 +57,8 @@ app.get("/health", (_req, res) => {
         timestamp: new Date().toISOString()
     });
 });
+
+app.get('/api/users/:userId/role', gamificationController.handleGetUserRole);
 
 // -------------------------------------------------------
 // Mount Routes

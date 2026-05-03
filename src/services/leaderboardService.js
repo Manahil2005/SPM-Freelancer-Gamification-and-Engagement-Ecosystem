@@ -98,16 +98,20 @@ async function fetchWeeklyData() {
         gup.total_points,
         gup.current_level  AS level,
         gup.created_at,
-        wpl.points_earned  AS points_for_rank,
-        wpl.activity_count,
-        wpl.week_start
-      FROM gamification_weekly_points_log wpl
-      JOIN gamification_user_progress gup ON gup.user_id = wpl.user_id
-      WHERE wpl.week_start = DATE_TRUNC('week', NOW())::DATE
+        COALESCE(wpl.points_earned, 0) AS points_for_rank,
+        COALESCE(wpl.activity_count, 0) AS activity_count
+      FROM gamification_user_progress gup
+      JOIN gamification_weekly_points_log wpl ON wpl.user_id = gup.user_id
+      WHERE wpl.week_start = (
+        CURRENT_DATE - EXTRACT(ISODOW FROM CURRENT_DATE)::INT + 1
+      )
     `);
 
     const nameMap = await getUserNames(rows.map(r => String(r.user_id)));
-    return rows.map(row => ({ ...row, name: nameMap[String(row.user_id)] || `User ${row.user_id}` }));
+    return rows.map(row => ({
+      ...row,
+      name: nameMap[String(row.user_id)] || `User ${row.user_id}`,
+    }));
 
   } catch (err) {
     console.error("[Leaderboard] fetchWeeklyData error:", err.message);
